@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: 249 250 251;
+    --color-panel: 255 255 255;
+    --color-border: 229 231 235;
+    --color-primary: 99 102 241;
+    --color-text-main: 17 24 39;
+    --color-text-muted: 107 114 128;
+  }
+  
+  .dark {
+    --color-bg: 10 10 15;
+    --color-panel: 20 20 25;
+    --color-border: 42 42 53;
+    --color-primary: 99 102 241;
+    --color-text-main: 255 255 255;
+    --color-text-muted: 156 163 175;
+  }
+
+  body {
+    @apply bg-background text-textMain font-sans overflow-hidden antialiased;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-panel/70 backdrop-blur-lg border border-border shadow-2xl;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+  }
+}

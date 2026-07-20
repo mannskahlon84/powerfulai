@@ -1,0 +1,185 @@
+export const handler = async (event) => {
+  // Only allow POST requests
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
+
+  let messages;
+  try {
+    const body = JSON.parse(event.body);
+    messages = body.messages;
+    
+    // Sanitize messages: APIs throw 400 errors if conversation history contains
+    // internal error messages or starts with an 'assistant' role.
+    messages = messages.filter(m => {
+      if (typeof m.content === 'string') {
+        return !m.content.includes('Sorry,') && 
+               !m.content.includes('🚨') &&
+               !m.content.includes('Backend Error Report');
+      }
+      return true;
+    });
+    
+    while (messages.length > 0 && messages[0].role === 'assistant') {
+      messages.shift();
+    }
+    
+    if (messages.length === 0) {
+      messages = [{ role: 'user', content: 'Hello' }];
+    }
+
+    // Inject a powerful System Prompt to make the AI act like ChatGPT
+    const systemPrompt = {
+      role: "system",
+      content: "You are Powerful AI, an incredibly advanced, helpful, and intelligent assistant. You must format your responses beautifully using Markdown. When writing code, ALWAYS use markdown code blocks with the correct language tag. Be concise, direct, and act like a world-class expert programmer and advisor.\n\nCRITICAL RULE FOR IMAGES: IF AND ONLY IF the user explicitly asks you to generate, create, or draw an image, you MUST act as an expert prompt engineer. You will enhance the user's prompt into a highly detailed, professional Midjourney-style prompt. When doing this, you MUST respond ONLY with the following exact format: `[GENERATE_IMAGE: <your highly detailed DALL-E 3 prompt here>]`.\n\nFor ALL other regular questions (like troubleshooting, chat, or coding), just respond normally and conversationally in plain text and markdown. Do NOT respond in code unless the user asks for code."
+    };
+    
+    messages = [systemPrompt, ...messages];
+  } catch (e) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON payload' }) };
+  }
+
+  // Helper function to call OpenAI-compatible endpoints
+  const callProvider = async (url, apiKey, model) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: messages
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status} - ${errorText}`);
+    }
+    return response.json();
+  };
+
+  const handleOpenAIImageGeneration = async (data) => {
+    try {
+      if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) return data;
+      
+      const message = data.choices[0].message.content;
+      const match = message.match(/\[GENERATE_IMAGE:\s*([\s\S]*?)\]/);
+      
+      if (match && match[1]) {
+        if (!process.env.OPENAI_API_KEY) {
+          data.choices[0].message.content = "Sorry, I detected an image request, but the OPENAI_API_KEY is missing from the environment variables.";
+          return data;
+        }
+
+        const imagePrompt = match[1].trim();
+        console.log("DALL-E 3 Intercept Triggered. Prompt:", imagePrompt);
+        
+        const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY.trim()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: "dall-e-3",
+            prompt: imagePrompt.substring(0, 4000), // OpenAI max prompt length
+            n: 1,
+            size: "1024x1024"
+          })
+        });
+        
+        const openaiData = await openaiRes.json();
+        
+        if (openaiData.data && openaiData.data[0]) {
+          const imageUrl = openaiData.data[0].url;
+          data.choices[0].message.content = `![Generated Image](${imageUrl})`;
+        } else {
+          console.error("OpenAI Error:", openaiData);
+          data.choices[0].message.content = "Sorry, I encountered an error while generating the image with DALL-E 3: " + (openaiData.error?.message || "Unknown error");
+        }
+      }
+    } catch (e) {
+      console.error("DALL-E intercept error:", e);
+    }
+    return data;
+  };
+
+  const errors = [];
+  const requiresVision = messages.some(m => Array.isArray(m.content));
+
+  try {
+    let groqFailed = false;
+    // 1. Primary: Try Groq
+    if (!requiresVision) {
+      try {
+        if (!process.env.GROQ_API_KEY) throw new Error("Missing GROQ_API_KEY");
+        console.log('Attempting Groq...');
+        const data = await callProvider(
+          'https://api.groq.com/openai/v1/chat/completions',
+          process.env.GROQ_API_KEY,
+          'llama-3.1-8b-instant'
+        );
+        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+        return { statusCode: 200, body: JSON.stringify(await handleOpenAIImageGeneration(data)) };
+      } catch (e) {
+        errors.push(`Groq Error: ${e.message}`);
+        console.log('Groq failed:', e.message);
+        groqFailed = true;
+      }
+    } else {
+      console.log('Vision request detected. Skipping Groq.');
+      errors.push('Groq skipped (does not support vision).');
+      groqFailed = true;
+    }
+
+    // 2. Fallback 1: Try Gemini
+    if (groqFailed || requiresVision) {
+    try {
+      if (!process.env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
+      console.log('Attempting Gemini...');
+      const data = await callProvider(
+        'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+        process.env.GEMINI_API_KEY,
+        'gemini-1.5-flash-latest'
+      );
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      return { statusCode: 200, body: JSON.stringify(await handleOpenAIImageGeneration(data)) };
+    } catch (e) {
+      errors.push(`Gemini Error: ${e.message}`);
+      console.log('Gemini failed:', e.message);
+    }
+    }
+
+    // 3. Fallback 2: Try OpenRouter
+    try {
+      if (!process.env.OPENROUTER_API_KEY) throw new Error("Missing OPENROUTER_API_KEY");
+      console.log('Attempting OpenRouter...');
+      const data = await callProvider(
+        'https://openrouter.ai/api/v1/chat/completions',
+        process.env.OPENROUTER_API_KEY,
+        'openai/gpt-4o-mini'
+      );
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      return { statusCode: 200, body: JSON.stringify(await handleOpenAIImageGeneration(data)) };
+    } catch (e) {
+      errors.push(`OpenRouter Error: ${e.message}`);
+      console.log('OpenRouter failed:', e.message);
+      throw new Error('All AI providers failed');
+    }
+
+  } catch (error) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: `🚨 **Backend Error Report:**\n\nI tried all three AI providers, but they all failed to connect. Here are the exact errors the server received:\n\n- ${errors.join('\n- ')}\n\n**How to fix:** Please check your Netlify Environment Variables! If it says "Missing KEY", you named the variable wrong. If it says "401" or "Unauthorized", the key is invalid or has quotation marks around it.`
+          }
+        }]
+      })
+    };
+  }
+};
