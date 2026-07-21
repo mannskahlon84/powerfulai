@@ -41,7 +41,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
           <button
             key={chat.id}
             onClick={() => onSelectChat(chat.id)}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors text-left group ${
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-colors text-left group ${
               activeChatId === chat.id 
                 ? 'bg-border/60 text-white' 
                 : 'text-textMuted hover:bg-border/30 hover:text-white'
@@ -70,7 +70,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user.displayName || 'User'}</p>
+            <p className="text-xs font-medium text-white truncate">{user.displayName || 'User'}</p>
             <p className="text-xs text-textMuted truncate">{user.email}</p>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
           className="flex items-center gap-3 text-textMuted hover:text-textMain transition-colors w-full px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          <span className="text-sm font-medium">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+          <span className="text-xs font-medium">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
         </button>
 
         <button 
@@ -90,7 +90,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
           className="flex items-center gap-3 text-textMuted hover:text-textMain transition-colors w-full px-3 py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
         >
           <Settings size={18} />
-          <span className="text-sm font-medium">Settings</span>
+          <span className="text-xs font-medium">Settings</span>
         </button>
         
         <button 
@@ -104,7 +104,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
           className="flex items-center gap-3 text-red-400 hover:text-red-500 transition-colors w-full px-3 py-2 rounded-lg hover:bg-red-500/10"
         >
           <LogOut size={18} />
-          <span className="text-sm font-medium">Log out</span>
+          <span className="text-xs font-medium">Log out</span>
         </button>
       </div>
     </div>

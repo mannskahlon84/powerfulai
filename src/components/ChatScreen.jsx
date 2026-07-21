@@ -354,7 +354,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask me anything or trigger an agent..."
-              className="flex-1 bg-transparent text-textMain placeholder-textMuted resize-none outline-none max-h-32 min-h-[44px] py-3 text-[15px]"
+              className="flex-1 bg-transparent text-textMain placeholder-textMuted resize-none outline-none max-h-32 min-h-[44px] py-3 text-[13px]"
               rows={1}
             />
             

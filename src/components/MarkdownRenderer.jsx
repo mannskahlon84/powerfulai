@@ -18,7 +18,7 @@ export default function MarkdownRenderer({ content }) {
   });
 
   return (
-    <div className="markdown-body text-sm md:text-base leading-normal space-y-2 text-textMain">
+    <div className="markdown-body text-[13px] md:text-sm leading-normal space-y-2 text-textMain">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
