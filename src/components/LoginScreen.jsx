@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { auth, googleProvider, githubProvider, microsoftProvider, yahooProvider } from '../firebase';
+import { auth, googleProvider, githubProvider, microsoftProvider } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { Sparkles } from 'lucide-react';
 
@@ -88,16 +88,7 @@ export default function LoginScreen() {
             className="w-full flex items-center justify-center gap-3 bg-black/5 hover:bg-black/10 border border-black/10 dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/10 text-textMain py-3 px-4 rounded-xl transition-all duration-200 shadow-sm disabled:opacity-50"
           >
             <img src="https://www.svgrepo.com/show/452296/microsoft.svg" className="w-5 h-5" alt="Microsoft" />
-            Continue with Outlook
-          </button>
-
-          <button 
-            onClick={() => handleLogin(yahooProvider)}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center gap-3 bg-[#6001D2]/10 hover:bg-[#6001D2]/20 border-[#6001D2]/20 dark:bg-[#6001D2]/20 dark:hover:bg-[#6001D2]/30 dark:border-[#6001D2]/40 text-textMain py-3 px-4 rounded-xl transition-all duration-200 shadow-sm disabled:opacity-50"
-          >
-            <img src="https://www.svgrepo.com/show/354593/yahoo.svg" className="w-5 h-5" alt="Yahoo" />
-            Continue with Yahoo
+            Login with Microsoft
           </button>
         </div>
       </div>
