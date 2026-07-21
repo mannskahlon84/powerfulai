@@ -102,6 +102,7 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       console.error("Image intercept error:", e);
+      data.choices[0].message.content = `🚨 **Internal Image Intercept Error:** ${e.message}\n\nOriginal prompt: ${message}`;
     }
     return data;
   };
