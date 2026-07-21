@@ -76,36 +76,29 @@ export default async function handler(req, res) {
         // Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
         if (process.env.OPENAI_API_KEY) {
           console.log("Using Premium Engine: DALL-E 3");
-          try {
-            const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
-              },
-              body: JSON.stringify({
-                model: "dall-e-3",
-                prompt: imagePrompt,
-                n: 1,
-                size: "1024x1024",
-                quality: "hd"
-              })
-            });
-            const openAiData = await openAiRes.json();
-            if (openAiData.error) {
-              console.error("DALL-E 3 Error:", openAiData.error.message);
-              throw new Error(openAiData.error.message);
-            }
-            imageUrl = openAiData.data[0].url;
-            generatorName = "DALL-E 3 (Premium)";
-          } catch (err) {
-            console.error("DALL-E fallback triggered:", err);
-            // Fallback to Pollinations below if DALL-E fails
+          const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
+            },
+            body: JSON.stringify({
+              model: "dall-e-3",
+              prompt: imagePrompt,
+              n: 1,
+              size: "1024x1024",
+              quality: "hd"
+            })
+          });
+          const openAiData = await openAiRes.json();
+          if (openAiData.error) {
+            data.choices[0].message.content = `🚨 **DALL-E 3 Error:** ${openAiData.error.message}\n\n*(Note: Your OPENAI_API_KEY is present, but OpenAI rejected the request. Check if your OpenAI account has billing credits, or if the prompt violated OpenAI safety filters.)*\n\nOriginal prompt: ${imagePrompt}`;
+            return data;
           }
-        }
-
-        // Free Engine: Pollinations (FLUX)
-        if (!imageUrl) {
+          imageUrl = openAiData.data[0].url;
+          generatorName = "DALL-E 3 (Premium)";
+        } else {
+          // Free Engine: Pollinations (FLUX)
           console.log("Using Free Engine: Pollinations FLUX.1");
           const encodedPrompt = encodeURIComponent(imagePrompt);
           const randomSeed = Math.floor(Math.random() * 1000000);
