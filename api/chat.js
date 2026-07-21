@@ -67,39 +67,15 @@ export default async function handler(req, res) {
       const match = messageStr.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
       
       if (match && match[1]) {
-        const hfToken = process.env.HF_TOKEN;
-        
-        if (!hfToken) {
-          data.choices[0].message.content = "Sorry, I detected an image request, but the HF_TOKEN is missing from the environment variables.";
-          return data;
-        }
-
         const imagePrompt = match[1].trim();
-        console.log("Hugging Face FLUX Intercept Triggered. Prompt:", imagePrompt);
+        console.log("Image Intercept Triggered. Prompt:", imagePrompt);
         
-        const hfRes = await fetch("https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${hfToken.trim()}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ inputs: imagePrompt }),
-        });
+        // Use Pollinations (which uses FLUX) as a direct URL to avoid Vercel timeouts and HuggingFace fetch errors
+        const encodedPrompt = encodeURIComponent(imagePrompt);
+        const randomSeed = Math.floor(Math.random() * 1000000);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true&enhance=true`;
         
-        if (!hfRes.ok) {
-          const errText = await hfRes.text();
-          console.error("Hugging Face API Error:", errText);
-          data.choices[0].message.content = "Sorry, Hugging Face returned an error (it might be loading the model or rate limiting). Please try again in 30 seconds. Error: " + hfRes.statusText;
-          return data;
-        }
-
-        const arrayBuffer = await hfRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
-        const mimeType = hfRes.headers.get("content-type") || 'image/jpeg';
-        
-        const imageUrl = `data:${mimeType};base64,${base64}`;
-        data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with FLUX.1 via Hugging Face)*`;
+        data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with FLUX.1)*`;
       }
     } catch (e) {
       console.error("Image intercept error:", e);
