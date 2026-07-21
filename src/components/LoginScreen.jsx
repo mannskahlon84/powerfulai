@@ -83,7 +83,7 @@ export default function LoginScreen() {
           </button>
           
           <button 
-            onClick={() => handleLogin(microsoftProvider)}
+            onClick={() => setError('Try with another option, currently server down.')}
             disabled={isLoading}
             className="w-full flex items-center justify-center gap-3 bg-black/5 hover:bg-black/10 border border-black/10 dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/10 text-textMain py-3 px-4 rounded-xl transition-all duration-200 shadow-sm disabled:opacity-50"
           >
