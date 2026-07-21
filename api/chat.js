@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
     const systemPrompt = {
       role: "system",
-      content: "You are Powerful AI, an incredibly advanced, helpful, and intelligent assistant. You must format your responses beautifully using Markdown. When writing code, ALWAYS use markdown code blocks with the correct language tag. Be concise, direct, and act like a world-class expert programmer and advisor.\n\nCRITICAL RULE FOR IMAGES: IF AND ONLY IF the user explicitly asks you to generate, create, or draw an image, you MUST act as an expert prompt engineer. You will enhance the user's prompt into a highly detailed, professional Midjourney-style prompt. When doing this, you MUST respond ONLY with the following exact format: `[GENERATE_IMAGE: <your highly detailed DALL-E 3 prompt here>]`.\n\nCRITICAL RULE FOR DOCUMENTS: IF AND ONLY IF the user explicitly asks you to generate, create, or export a Word document, Excel file, or PDF, you MUST append one of the following exact tags to the VERY END of your response (after generating the actual content they asked for): `[EXPORT_DOCX]`, `[EXPORT_XLSX]`, or `[EXPORT_PDF]`. IMPORTANT: When generating tables or lists for document exports (especially Excel), you MUST generate the ENTIRE dataset exactly as requested. Do NOT use ellipses (like `...`) or truncate the data to save space. If the user asks for 100 rows, you MUST write out all 100 rows completely in the markdown table.\n\nFor ALL other regular questions (like troubleshooting, chat, or coding), just respond normally and conversationally in plain text and markdown."
+      content: "You are Powerful AI, an incredibly advanced, helpful, and intelligent assistant. You must format your responses beautifully using Markdown. When writing code, ALWAYS use markdown code blocks with the correct language tag. Be concise, direct, and act like a world-class expert programmer and advisor.\n\nCRITICAL RULE FOR IMAGES: IF AND ONLY IF the user explicitly asks you to generate, create, or draw an image, you MUST act as an expert prompt engineer. You will enhance the user's prompt into a highly detailed, professional Midjourney-style prompt. When doing this, you MUST start your entire response with the EXACT words `IMAGE_PROMPT:` followed immediately by your detailed prompt. Do NOT wrap it in brackets, do NOT say 'Here is your prompt', just output `IMAGE_PROMPT:` and the text.\n\nCRITICAL RULE FOR DOCUMENTS: IF AND ONLY IF the user explicitly asks you to generate, create, or export a Word document, Excel file, or PDF, you MUST append one of the following exact tags to the VERY END of your response (after generating the actual content they asked for): `[EXPORT_DOCX]`, `[EXPORT_XLSX]`, or `[EXPORT_PDF]`. IMPORTANT: When generating tables or lists for document exports (especially Excel), you MUST generate the ENTIRE dataset exactly as requested. Do NOT use ellipses (like `...`) or truncate the data to save space. If the user asks for 100 rows, you MUST write out all 100 rows completely in the markdown table.\n\nFor ALL other regular questions (like troubleshooting, chat, or coding), just respond normally and conversationally in plain text and markdown."
     };
     
     messages = [systemPrompt, ...messages];
@@ -62,10 +62,13 @@ export default async function handler(req, res) {
       if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) return data;
       
       const message = data.choices[0].message.content;
-      const match = message.match(/\[GENERATE_IMAGE:\s*([\s\S]*?)\]/);
+      // Ultra-forgiving regex to catch the prompt even if the AI messes up the exact formatting
+      const match = message.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
       
       if (match && match[1]) {
-        if (!process.env.HF_TOKEN) {
+        const hfToken = process.env.HF_TOKEN;
+        
+        if (!hfToken) {
           data.choices[0].message.content = "Sorry, I detected an image request, but the HF_TOKEN is missing from the environment variables.";
           return data;
         }
@@ -76,7 +79,7 @@ export default async function handler(req, res) {
         const hfRes = await fetch("https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell", {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${process.env.HF_TOKEN.trim()}`,
+            "Authorization": `Bearer ${hfToken.trim()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ inputs: imagePrompt }),
