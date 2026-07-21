@@ -137,7 +137,7 @@ export default async function handler(req, res) {
         const data = await callProvider(
           'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
           process.env.GEMINI_API_KEY,
-          'gemini-1.5-flash-latest'
+          'gemini-1.5-flash'
         );
         if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
         return res.status(200).json(await handleOpenAIImageGeneration(data));
