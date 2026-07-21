@@ -58,12 +58,13 @@ export default async function handler(req, res) {
   };
 
   const handleOpenAIImageGeneration = async (data) => {
+    let messageStr = "";
     try {
       if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) return data;
       
-      const message = data.choices[0].message.content;
+      messageStr = data.choices[0].message.content;
       // Ultra-forgiving regex to catch the prompt even if the AI messes up the exact formatting
-      const match = message.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
+      const match = messageStr.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
       
       if (match && match[1]) {
         const hfToken = process.env.HF_TOKEN;
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       console.error("Image intercept error:", e);
-      data.choices[0].message.content = `🚨 **Internal Image Intercept Error:** ${e.message}\n\nOriginal prompt: ${message}`;
+      data.choices[0].message.content = `🚨 **Internal Image Intercept Error:** ${e.message}\n\nOriginal prompt: ${messageStr}`;
     }
     return data;
   };
@@ -168,11 +169,11 @@ export default async function handler(req, res) {
     }
 
   } catch (error) {
-    return res.status(500).json({ 
+    return res.status(500).json({
       choices: [{
         message: {
-          role: 'assistant',
-          content: `🚨 **Backend Error Report:**\n\nI tried all three AI providers, but they all failed to connect. Here are the exact errors the server received:\n\n- ${errors.join('\n- ')}\n\n**How to fix:** Please check your Vercel Environment Variables! If it says "Missing KEY", you named the variable wrong. If it says "401" or "Unauthorized", the key is invalid or has quotation marks around it.`
+          role: "assistant",
+          content: "Sorry, the AI backend is currently unavailable. Please try again later."
         }
       }]
     });
