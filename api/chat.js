@@ -65,40 +65,17 @@ export default async function handler(req, res) {
       const match = message.match(/\[GENERATE_IMAGE:\s*([\s\S]*?)\]/);
       
       if (match && match[1]) {
-        if (!process.env.OPENAI_API_KEY) {
-          data.choices[0].message.content = "Sorry, I detected an image request, but the OPENAI_API_KEY is missing from the environment variables.";
-          return data;
-        }
-
         const imagePrompt = match[1].trim();
-        console.log("DALL-E 3 Intercept Triggered. Prompt:", imagePrompt);
+        console.log("Free Image Intercept Triggered. Prompt:", imagePrompt);
         
-        const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: "dall-e-2",
-            prompt: imagePrompt.substring(0, 1000), // DALL-E 2 has a 1000 char limit
-            n: 1,
-            size: "1024x1024"
-          })
-        });
+        // Use Pollinations.ai for 100% free, no-key image generation
+        const encodedPrompt = encodeURIComponent(imagePrompt);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true`;
         
-        const openaiData = await openaiRes.json();
-        
-        if (openaiData.data && openaiData.data[0]) {
-          const imageUrl = openaiData.data[0].url;
-          data.choices[0].message.content = `![Generated Image](${imageUrl})`;
-        } else {
-          console.error("OpenAI Error:", openaiData);
-          data.choices[0].message.content = "Sorry, I encountered an error while generating the image with DALL-E 3: " + (openaiData.error?.message || "Unknown error");
-        }
+        data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated for free without OpenAI billing)*`;
       }
     } catch (e) {
-      console.error("DALL-E intercept error:", e);
+      console.error("Image intercept error:", e);
     }
     return data;
   };
