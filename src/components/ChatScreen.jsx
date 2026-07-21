@@ -2,6 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 import MarkdownRenderer from './MarkdownRenderer';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
+// Set PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 export default function ChatScreen({ messages, onUpdateMessages }) {
   const [input, setInput] = useState('');
@@ -79,21 +84,75 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     }
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setAttachedImage(reader.result);
         setShowAttachMenu(false);
       };
       reader.readAsDataURL(file);
+    } else {
+      setShowAttachMenu(false);
+      setIsLoading(true);
+      try {
+        let textContent = `[Attached Document: ${file.name}]\n\n`;
+        
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')) {
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const csvData = XLSX.utils.sheet_to_csv(worksheet);
+          textContent += csvData;
+        } else if (file.name.endsWith('.docx')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          textContent += result.value;
+        } else if (file.name.endsWith('.pdf')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          let pdfText = '';
+          for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const strings = content.items.map(item => item.str);
+            pdfText += strings.join(' ') + '\n';
+          }
+          textContent += pdfText;
+        } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+          textContent += await file.text();
+        } else {
+          throw new Error("Unsupported file format. Please upload Images, Excel, Word, or PDF.");
+        }
+        
+        setInput(textContent.substring(0, 20000));
+        setTimeout(() => textareaRef.current?.focus(), 100);
+      } catch (err) {
+        console.error("Document read error:", err);
+        alert("Failed to read document: " + err.message);
+      } finally {
+        setIsLoading(false);
+      }
     }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const [fileInputConfig, setFileInputConfig] = useState({ accept: 'image/*', capture: undefined });
+
   const handleMenuAction = (actionType) => {
-    if (actionType === 'upload') {
-      fileInputRef.current?.click();
+    if (actionType === 'camera') {
+      setFileInputConfig({ accept: 'image/*', capture: 'environment' });
+      setTimeout(() => fileInputRef.current?.click(), 50);
+    } else if (actionType === 'photos') {
+      setFileInputConfig({ accept: 'image/*', capture: undefined });
+      setTimeout(() => fileInputRef.current?.click(), 50);
+    } else if (actionType === 'files') {
+      setFileInputConfig({ accept: '.xlsx,.docx,.pdf,.txt', capture: undefined });
+      setTimeout(() => fileInputRef.current?.click(), 50);
     } else {
       setInput(actionType);
       setTimeout(() => textareaRef.current?.focus(), 100);
@@ -102,13 +161,56 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
   };
 
   const attachmentOptions = [
-    { icon: Camera, label: 'Open camera', color: 'text-blue-400', action: () => handleMenuAction('upload') },
-    { icon: File, label: 'Upload files', color: 'text-purple-400', action: () => handleMenuAction('upload') },
-    { icon: Image, label: 'Upload photos', color: 'text-green-400', action: () => handleMenuAction('upload') },
+    { icon: Camera, label: 'Open camera', color: 'text-blue-400', action: () => handleMenuAction('camera') },
+    { icon: File, label: 'Upload files', color: 'text-purple-400', action: () => handleMenuAction('files') },
+    { icon: Image, label: 'Upload photos', color: 'text-green-400', action: () => handleMenuAction('photos') },
     { icon: Sparkles, label: 'Create image', color: 'text-yellow-400', action: () => handleMenuAction('Generate an image of ') },
     { icon: Video, label: 'Create video', color: 'text-pink-400', action: () => handleMenuAction('Generate a video script for ') },
     { icon: Music, label: 'Create song', color: 'text-orange-400', action: () => handleMenuAction('Write a song about ') },
   ];
+
+  const exportToPDF = (index) => {
+    import('html2pdf.js').then((html2pdf) => {
+      const element = document.getElementById(`msg-content-${index}`);
+      if (element) {
+        html2pdf.default().from(element).set({
+          margin: 1,
+          filename: 'AI_Summary.pdf',
+          html2canvas: { scale: 2 },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        }).save();
+      }
+    });
+  };
+
+  const exportToWord = (index) => {
+    const element = document.getElementById(`msg-content-${index}`);
+    if (element) {
+      const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML to Word Document</title></head><body>";
+      const footer = "</body></html>";
+      const sourceHTML = header + element.innerHTML + footer;
+      const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+      const fileDownload = document.createElement("a");
+      document.body.appendChild(fileDownload);
+      fileDownload.href = source;
+      fileDownload.download = 'AI_Summary.doc';
+      fileDownload.click();
+      document.body.removeChild(fileDownload);
+    }
+  };
+
+  const exportToExcel = (index) => {
+    const element = document.getElementById(`msg-content-${index}`);
+    if (element) {
+      const tables = element.querySelectorAll('table');
+      if (tables.length === 0) {
+        alert('No tables found in this response to export to Excel.');
+        return;
+      }
+      const wb = XLSX.utils.table_to_book(tables[0]);
+      XLSX.writeFile(wb, 'AI_Data.xlsx');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full relative">
@@ -128,19 +230,43 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
                     ? 'bg-primary text-white ml-12 rounded-br-sm' 
                     : 'bg-panel border border-border/50 text-textMain mr-12 rounded-bl-sm'
                 }`}>
-                  {Array.isArray(msg.content) ? (
-                    <div>
-                      <MarkdownRenderer content={msg.content.find(c => c.type === 'text')?.text || ''} />
-                      {msg.content.find(c => c.type === 'image_url') && (
-                        <img src={msg.content.find(c => c.type === 'image_url').image_url.url} alt="Attached" className="mt-3 max-h-64 rounded-lg object-contain" />
-                      )}
-                    </div>
-                  ) : (
-                    <MarkdownRenderer content={msg.content} />
-                  )}
+                  <div id={`msg-content-${idx}`}>
+                    {Array.isArray(msg.content) ? (
+                      <div>
+                        <MarkdownRenderer content={msg.content.find(c => c.type === 'text')?.text || ''} />
+                        {msg.content.find(c => c.type === 'image_url') && (
+                          <img src={msg.content.find(c => c.type === 'image_url').image_url.url} alt="Attached" className="mt-3 max-h-64 rounded-lg object-contain" />
+                        )}
+                      </div>
+                    ) : (
+                      <MarkdownRenderer content={msg.content} />
+                    )}
+                  </div>
                   
                   {msg.role === 'assistant' && (
-                    <div className="flex items-center gap-2 mt-3 text-textMuted">
+                    <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-border/50 text-textMuted">
+                      <button 
+                        onClick={() => exportToPDF(idx)}
+                        className="flex items-center gap-1.5 hover:text-red-400 text-[13px] font-medium transition-colors"
+                        title="Download as PDF"
+                      >
+                        <File size={14} /> PDF
+                      </button>
+                      <button 
+                        onClick={() => exportToWord(idx)}
+                        className="flex items-center gap-1.5 hover:text-blue-400 text-[13px] font-medium transition-colors"
+                        title="Download as Word"
+                      >
+                        <File size={14} /> Word
+                      </button>
+                      <button 
+                        onClick={() => exportToExcel(idx)}
+                        className="flex items-center gap-1.5 hover:text-green-400 text-[13px] font-medium transition-colors"
+                        title="Download as Excel"
+                      >
+                        <File size={14} /> Excel
+                      </button>
+                      <div className="w-px h-3 bg-border/50 mx-1"></div>
                       <button 
                         onClick={() => {
                           if (isSpeaking) {
@@ -149,10 +275,11 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
                             speak(msg.content);
                           }
                         }}
-                        className={`transition-colors p-1 ${isSpeaking ? 'text-primary animate-pulse' : 'hover:text-primary'}`}
+                        className={`flex items-center gap-1.5 transition-colors text-[13px] font-medium ${isSpeaking ? 'text-primary animate-pulse' : 'hover:text-primary'}`}
                         title={isSpeaking ? "Stop reading" : "Read aloud"}
                       >
-                        {isSpeaking ? <Square size={14} /> : <Volume2 size={16} />}
+                        {isSpeaking ? <Square size={14} /> : <Volume2 size={14} />} 
+                        {isSpeaking ? 'Stop' : 'Read'}
                       </button>
                     </div>
                   )}
@@ -206,7 +333,14 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
           )}
 
           <div className="glass rounded-3xl p-2 flex items-end gap-2 relative z-20">
-            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+              accept={fileInputConfig.accept} 
+              capture={fileInputConfig.capture}
+              className="hidden" 
+            />
             <button 
               onClick={() => setShowAttachMenu(!showAttachMenu)}
               className="p-3 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors flex-shrink-0"
