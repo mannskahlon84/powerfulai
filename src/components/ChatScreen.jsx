@@ -223,69 +223,101 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               <h2 className="text-2xl font-medium text-textMain">How can I help you today?</h2>
             </div>
           ) : (
-            messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-primary text-white ml-12 rounded-br-sm' 
-                    : 'bg-panel border border-border/50 text-textMain mr-12 rounded-bl-sm'
-                }`}>
-                  <div id={`msg-content-${idx}`}>
-                    {Array.isArray(msg.content) ? (
-                      <div>
-                        <MarkdownRenderer content={msg.content.find(c => c.type === 'text')?.text || ''} />
-                        {msg.content.find(c => c.type === 'image_url') && (
-                          <img src={msg.content.find(c => c.type === 'image_url').image_url.url} alt="Attached" className="mt-3 max-h-64 rounded-lg object-contain" />
+            messages.map((msg, idx) => {
+              let contentString = '';
+              let isPdf = false;
+              let isWord = false;
+              let isExcel = false;
+              
+              if (typeof msg.content === 'string') {
+                contentString = msg.content;
+                if (contentString.includes('[EXPORT_PDF]')) {
+                  isPdf = true;
+                  contentString = contentString.replace('[EXPORT_PDF]', '').trim();
+                }
+                if (contentString.includes('[EXPORT_DOCX]')) {
+                  isWord = true;
+                  contentString = contentString.replace('[EXPORT_DOCX]', '').trim();
+                }
+                if (contentString.includes('[EXPORT_XLSX]')) {
+                  isExcel = true;
+                  contentString = contentString.replace('[EXPORT_XLSX]', '').trim();
+                }
+              }
+
+              return (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-primary text-white ml-12 rounded-br-sm' 
+                      : 'bg-panel border border-border/50 text-textMain mr-12 rounded-bl-sm'
+                  }`}>
+                    <div id={`msg-content-${idx}`}>
+                      {Array.isArray(msg.content) ? (
+                        <div>
+                          <MarkdownRenderer content={msg.content.find(c => c.type === 'text')?.text || ''} />
+                          {msg.content.find(c => c.type === 'image_url') && (
+                            <img src={msg.content.find(c => c.type === 'image_url').image_url.url} alt="Attached" className="mt-3 max-h-64 rounded-lg object-contain" />
+                          )}
+                        </div>
+                      ) : (
+                        <MarkdownRenderer content={contentString} />
+                      )}
+                    </div>
+                    
+                    {msg.role === 'assistant' && (
+                      <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border/50 text-textMuted">
+                        {(isPdf || isWord || isExcel) && (
+                          <div className="flex flex-wrap gap-2 mb-1">
+                            {isPdf && (
+                              <button 
+                                onClick={() => exportToPDF(idx)}
+                                className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 px-4 py-2 rounded-xl transition-all font-medium text-sm border border-red-500/20 shadow-sm"
+                              >
+                                <File size={16} /> Download PDF
+                              </button>
+                            )}
+                            {isWord && (
+                              <button 
+                                onClick={() => exportToWord(idx)}
+                                className="flex items-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 px-4 py-2 rounded-xl transition-all font-medium text-sm border border-blue-500/20 shadow-sm"
+                              >
+                                <File size={16} /> Download Word Document
+                              </button>
+                            )}
+                            {isExcel && (
+                              <button 
+                                onClick={() => exportToExcel(idx)}
+                                className="flex items-center gap-2 bg-green-500/10 hover:bg-green-500/20 text-green-500 px-4 py-2 rounded-xl transition-all font-medium text-sm border border-green-500/20 shadow-sm"
+                              >
+                                <File size={16} /> Download Excel File
+                              </button>
+                            )}
+                          </div>
                         )}
+                        
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => {
+                              if (isSpeaking) {
+                                stopSpeaking();
+                              } else {
+                                speak(contentString);
+                              }
+                            }}
+                            className={`flex items-center gap-1.5 transition-colors text-[13px] font-medium ${isSpeaking ? 'text-primary animate-pulse' : 'hover:text-primary'}`}
+                            title={isSpeaking ? "Stop reading" : "Read aloud"}
+                          >
+                            {isSpeaking ? <Square size={14} /> : <Volume2 size={14} />} 
+                            {isSpeaking ? 'Stop' : 'Read'}
+                          </button>
+                        </div>
                       </div>
-                    ) : (
-                      <MarkdownRenderer content={msg.content} />
                     )}
                   </div>
-                  
-                  {msg.role === 'assistant' && (
-                    <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-border/50 text-textMuted">
-                      <button 
-                        onClick={() => exportToPDF(idx)}
-                        className="flex items-center gap-1.5 hover:text-red-400 text-[13px] font-medium transition-colors"
-                        title="Download as PDF"
-                      >
-                        <File size={14} /> PDF
-                      </button>
-                      <button 
-                        onClick={() => exportToWord(idx)}
-                        className="flex items-center gap-1.5 hover:text-blue-400 text-[13px] font-medium transition-colors"
-                        title="Download as Word"
-                      >
-                        <File size={14} /> Word
-                      </button>
-                      <button 
-                        onClick={() => exportToExcel(idx)}
-                        className="flex items-center gap-1.5 hover:text-green-400 text-[13px] font-medium transition-colors"
-                        title="Download as Excel"
-                      >
-                        <File size={14} /> Excel
-                      </button>
-                      <div className="w-px h-3 bg-border/50 mx-1"></div>
-                      <button 
-                        onClick={() => {
-                          if (isSpeaking) {
-                            stopSpeaking();
-                          } else {
-                            speak(msg.content);
-                          }
-                        }}
-                        className={`flex items-center gap-1.5 transition-colors text-[13px] font-medium ${isSpeaking ? 'text-primary animate-pulse' : 'hover:text-primary'}`}
-                        title={isSpeaking ? "Stop reading" : "Read aloud"}
-                      >
-                        {isSpeaking ? <Square size={14} /> : <Volume2 size={14} />} 
-                        {isSpeaking ? 'Stop' : 'Read'}
-                      </button>
-                    </div>
-                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
           {isLoading && (
             <div className="flex justify-start animate-fade-in">
