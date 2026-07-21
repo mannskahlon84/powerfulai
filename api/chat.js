@@ -1,16 +1,15 @@
-export const handler = async (event) => {
+export default async function handler(req, res) {
   // Only allow POST requests
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+  if (req.method !== 'POST') {
+    return res.status(405).send('Method Not Allowed');
   }
 
   let messages;
   try {
-    const body = JSON.parse(event.body);
-    messages = body.messages;
+    // Vercel parses JSON bodies automatically
+    messages = req.body.messages || [];
     
-    // Sanitize messages: APIs throw 400 errors if conversation history contains
-    // internal error messages or starts with an 'assistant' role.
+    // Sanitize messages
     messages = messages.filter(m => {
       if (typeof m.content === 'string') {
         return !m.content.includes('Sorry,') && 
@@ -28,7 +27,6 @@ export const handler = async (event) => {
       messages = [{ role: 'user', content: 'Hello' }];
     }
 
-    // Inject a powerful System Prompt to make the AI act like ChatGPT
     const systemPrompt = {
       role: "system",
       content: "You are Powerful AI, an incredibly advanced, helpful, and intelligent assistant. You must format your responses beautifully using Markdown. When writing code, ALWAYS use markdown code blocks with the correct language tag. Be concise, direct, and act like a world-class expert programmer and advisor.\n\nCRITICAL RULE FOR IMAGES: IF AND ONLY IF the user explicitly asks you to generate, create, or draw an image, you MUST act as an expert prompt engineer. You will enhance the user's prompt into a highly detailed, professional Midjourney-style prompt. When doing this, you MUST respond ONLY with the following exact format: `[GENERATE_IMAGE: <your highly detailed DALL-E 3 prompt here>]`.\n\nFor ALL other regular questions (like troubleshooting, chat, or coding), just respond normally and conversationally in plain text and markdown. Do NOT respond in code unless the user asks for code."
@@ -36,10 +34,9 @@ export const handler = async (event) => {
     
     messages = [systemPrompt, ...messages];
   } catch (e) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON payload' }) };
+    return res.status(400).json({ error: 'Invalid payload' });
   }
 
-  // Helper function to call OpenAI-compatible endpoints
   const callProvider = async (url, apiKey, model) => {
     const response = await fetch(url, {
       method: 'POST',
@@ -84,7 +81,7 @@ export const handler = async (event) => {
           },
           body: JSON.stringify({
             model: "dall-e-3",
-            prompt: imagePrompt.substring(0, 4000), // OpenAI max prompt length
+            prompt: imagePrompt.substring(0, 4000),
             n: 1,
             size: "1024x1024"
           })
@@ -111,7 +108,6 @@ export const handler = async (event) => {
 
   try {
     let groqFailed = false;
-    // 1. Primary: Try Groq
     if (!requiresVision) {
       try {
         if (!process.env.GROQ_API_KEY) throw new Error("Missing GROQ_API_KEY");
@@ -122,7 +118,7 @@ export const handler = async (event) => {
           'llama-3.1-8b-instant'
         );
         if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-        return { statusCode: 200, body: JSON.stringify(await handleOpenAIImageGeneration(data)) };
+        return res.status(200).json(await handleOpenAIImageGeneration(data));
       } catch (e) {
         errors.push(`Groq Error: ${e.message}`);
         console.log('Groq failed:', e.message);
@@ -134,25 +130,23 @@ export const handler = async (event) => {
       groqFailed = true;
     }
 
-    // 2. Fallback 1: Try Gemini
     if (groqFailed || requiresVision) {
-    try {
-      if (!process.env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
-      console.log('Attempting Gemini...');
-      const data = await callProvider(
-        'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-        process.env.GEMINI_API_KEY,
-        'gemini-1.5-flash-latest'
-      );
-      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-      return { statusCode: 200, body: JSON.stringify(await handleOpenAIImageGeneration(data)) };
-    } catch (e) {
-      errors.push(`Gemini Error: ${e.message}`);
-      console.log('Gemini failed:', e.message);
-    }
+      try {
+        if (!process.env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
+        console.log('Attempting Gemini...');
+        const data = await callProvider(
+          'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+          process.env.GEMINI_API_KEY,
+          'gemini-1.5-flash-latest'
+        );
+        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+        return res.status(200).json(await handleOpenAIImageGeneration(data));
+      } catch (e) {
+        errors.push(`Gemini Error: ${e.message}`);
+        console.log('Gemini failed:', e.message);
+      }
     }
 
-    // 3. Fallback 2: Try OpenRouter
     try {
       if (!process.env.OPENROUTER_API_KEY) throw new Error("Missing OPENROUTER_API_KEY");
       console.log('Attempting OpenRouter...');
@@ -162,7 +156,7 @@ export const handler = async (event) => {
         'openai/gpt-4o-mini'
       );
       if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-      return { statusCode: 200, body: JSON.stringify(await handleOpenAIImageGeneration(data)) };
+      return res.status(200).json(await handleOpenAIImageGeneration(data));
     } catch (e) {
       errors.push(`OpenRouter Error: ${e.message}`);
       console.log('OpenRouter failed:', e.message);
@@ -170,16 +164,13 @@ export const handler = async (event) => {
     }
 
   } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ 
-        choices: [{
-          message: {
-            role: 'assistant',
-            content: `🚨 **Backend Error Report:**\n\nI tried all three AI providers, but they all failed to connect. Here are the exact errors the server received:\n\n- ${errors.join('\n- ')}\n\n**How to fix:** Please check your Netlify Environment Variables! If it says "Missing KEY", you named the variable wrong. If it says "401" or "Unauthorized", the key is invalid or has quotation marks around it.`
-          }
-        }]
-      })
-    };
+    return res.status(500).json({ 
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: `🚨 **Backend Error Report:**\n\nI tried all three AI providers, but they all failed to connect. Here are the exact errors the server received:\n\n- ${errors.join('\n- ')}\n\n**How to fix:** Please check your Vercel Environment Variables! If it says "Missing KEY", you named the variable wrong. If it says "401" or "Unauthorized", the key is invalid or has quotation marks around it.`
+        }
+      }]
+    });
   }
-};
+}

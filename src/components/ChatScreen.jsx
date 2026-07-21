@@ -40,8 +40,8 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     setIsLoading(true);
 
     try {
-      // Connect to secure Netlify serverless function
-      const response = await fetch('/.netlify/functions/chat', {
+      // Connect to secure Vercel serverless function
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -66,7 +66,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       onUpdateMessages([...newMessages, aiResponse]);
     } catch (error) {
       console.error('Error fetching response:', error);
-      onUpdateMessages([...newMessages, { role: 'assistant', content: 'Sorry, I encountered an error connecting to the backend.' }]);
+      onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Backend Connection Error:**\n\n${error.message}\n\n*If this says "Failed to fetch", you are probably on the wrong port (make sure URL is localhost:8888, not 5173). If it says "Unexpected token", the Netlify server crashed.*` }]);
     } finally {
       setIsLoading(false);
     }
