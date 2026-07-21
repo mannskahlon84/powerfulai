@@ -80,8 +80,8 @@ export default async function handler(req, res) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: "dall-e-3",
-            prompt: imagePrompt.substring(0, 4000),
+            model: "dall-e-2",
+            prompt: imagePrompt.substring(0, 1000), // DALL-E 2 has a 1000 char limit
             n: 1,
             size: "1024x1024"
           })
