@@ -70,12 +70,50 @@ export default async function handler(req, res) {
         const imagePrompt = match[1].trim();
         console.log("Image Intercept Triggered. Prompt:", imagePrompt);
         
-        // Use Pollinations with flux-realism to ensure perfect human anatomy
-        const encodedPrompt = encodeURIComponent(imagePrompt);
-        const randomSeed = Math.floor(Math.random() * 1000000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true&model=flux-realism`;
+        let imageUrl = "";
+        let generatorName = "";
+
+        // Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
+        if (process.env.OPENAI_API_KEY) {
+          console.log("Using Premium Engine: DALL-E 3");
+          try {
+            const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
+              },
+              body: JSON.stringify({
+                model: "dall-e-3",
+                prompt: imagePrompt,
+                n: 1,
+                size: "1024x1024",
+                quality: "hd"
+              })
+            });
+            const openAiData = await openAiRes.json();
+            if (openAiData.error) {
+              console.error("DALL-E 3 Error:", openAiData.error.message);
+              throw new Error(openAiData.error.message);
+            }
+            imageUrl = openAiData.data[0].url;
+            generatorName = "DALL-E 3 (Premium)";
+          } catch (err) {
+            console.error("DALL-E fallback triggered:", err);
+            // Fallback to Pollinations below if DALL-E fails
+          }
+        }
+
+        // Free Engine: Pollinations (FLUX)
+        if (!imageUrl) {
+          console.log("Using Free Engine: Pollinations FLUX.1");
+          const encodedPrompt = encodeURIComponent(imagePrompt);
+          const randomSeed = Math.floor(Math.random() * 1000000);
+          imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true&model=flux-realism`;
+          generatorName = "FLUX.1 Realism";
+        }
         
-        data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with FLUX.1)*`;
+        data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
       }
     } catch (e) {
       console.error("Image intercept error:", e);
