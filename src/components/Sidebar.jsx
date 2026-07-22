@@ -5,7 +5,7 @@ import { signOut } from 'firebase/auth';
 
 export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDeleteChat, onNewChat, user, onOpenSettings }) {
   const [isDark, setIsDark] = useState(() => {
-    return document.documentElement.classList.contains('dark') || true;
+    return document.documentElement.classList.contains('dark') || false;
   });
 
   useEffect(() => {

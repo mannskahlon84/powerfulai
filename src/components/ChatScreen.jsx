@@ -216,7 +216,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     <div className="flex flex-col h-full relative">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
-        <div className="max-w-4xl mx-auto w-full space-y-6 pt-8 pb-4">
+        <div className="max-w-3xl mx-auto w-full space-y-6 pt-8 pb-4">
           {messages.length === 0 ? (
             <div className="flex h-[80vh] items-center justify-center flex-col text-textMuted space-y-4 animate-fade-in">
               <Sparkles size={48} className="text-primary/50" />
@@ -334,7 +334,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
 
       {/* Input Area */}
       <div className="p-4 bg-gradient-to-t from-white/80 via-white/50 dark:from-[#0a0a0f]/80 dark:via-[#0a0a0f]/50 to-transparent pt-10 backdrop-blur-[2px]">
-        <div className="max-w-4xl mx-auto relative">
+        <div className="max-w-3xl mx-auto relative">
           
           {/* Attachment Menu Popup */}
           {showAttachMenu && (
