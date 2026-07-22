@@ -17,12 +17,12 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
   }, [isDark]);
 
   return (
-    <div className="w-64 bg-panel border-r border-border flex flex-col h-full flex-shrink-0">
+    <div className="w-64 bg-panel/60 backdrop-blur-md border-r border-border/50 flex flex-col h-full flex-shrink-0 relative z-20">
       <div className="p-5 flex items-center gap-3">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center shadow-lg shadow-primary/20">
           <Zap size={18} className="text-white fill-white/20" />
         </div>
-        <h1 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">Powerful AI</h1>
+        <h1 className="text-lg font-bold text-textMain">Powerful AI</h1>
       </div>
 
       <div className="px-4 pb-4">

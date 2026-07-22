@@ -333,7 +333,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-gradient-to-t from-background via-background to-transparent pt-10">
+      <div className="p-4 bg-gradient-to-t from-white/80 via-white/50 dark:from-[#0a0a0f]/80 dark:via-[#0a0a0f]/50 to-transparent pt-10 backdrop-blur-[2px]">
         <div className="max-w-4xl mx-auto relative">
           
           {/* Attachment Menu Popup */}

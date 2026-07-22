@@ -90,21 +90,33 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-background text-textMain overflow-hidden">
-      <Sidebar 
-        chatHistory={chatHistory} 
-        activeChatId={activeChatId} 
-        onSelectChat={setActiveChatId}
-        onDeleteChat={handleDeleteChat}
-        onNewChat={handleNewChat}
-        user={user}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
-      <div className="flex-1 flex flex-col relative h-full">
-        <ChatScreen 
-          messages={activeChat.messages} 
-          onUpdateMessages={handleUpdateMessages} 
+    <div className="relative flex h-screen bg-white dark:bg-[#0a0a0f] text-textMain overflow-hidden font-sans">
+      {/* Floating Rainbow / Sky Blue / White Orbs Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-sky-300/60 dark:bg-sky-800/40 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[100px] animate-blob"></div>
+        <div className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-pink-300/60 dark:bg-pink-800/40 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[100px] animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-[-20%] left-[20%] w-[50%] h-[50%] bg-yellow-200/60 dark:bg-yellow-800/40 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[100px] animate-blob animation-delay-4000"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-300/60 dark:bg-purple-800/40 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[100px] animate-blob animation-delay-6000"></div>
+        <div className="absolute inset-0 bg-white/30 dark:bg-black/50 backdrop-blur-[10px]"></div>
+      </div>
+      
+      {/* Main Content Layer */}
+      <div className="relative z-10 flex h-full w-full">
+        <Sidebar 
+          chatHistory={chatHistory} 
+          activeChatId={activeChatId} 
+          onSelectChat={setActiveChatId}
+          onDeleteChat={handleDeleteChat}
+          onNewChat={handleNewChat}
+          user={user}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
+        <div className="flex-1 flex flex-col relative h-full">
+          <ChatScreen 
+            messages={activeChat.messages} 
+            onUpdateMessages={handleUpdateMessages} 
+          />
+        </div>
       </div>
       
       <SettingsModal 
