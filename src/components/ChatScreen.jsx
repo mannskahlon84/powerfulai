@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square } from 'lucide-react';
+import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, Headphones } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 import MarkdownRenderer from './MarkdownRenderer';
 import * as XLSX from 'xlsx';
@@ -17,6 +17,8 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const { speak, stopSpeaking, isSpeaking, listen, isListening } = useSpeech();
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const voiceModeRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -26,10 +28,34 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const handleSend = async () => {
-    if ((!input.trim() && !attachedImage) || isLoading) return;
+  const startVoiceLoop = () => {
+    if (!voiceModeRef.current) return;
+    listen(setInput, async (transcript) => {
+      if (!voiceModeRef.current) return;
+      if (transcript && transcript.trim()) {
+        await handleSend(transcript.trim(), true);
+      } else {
+        setTimeout(startVoiceLoop, 500);
+      }
+    });
+  };
 
-    let userContent = input.trim() || "What is in this image?";
+  const toggleVoiceMode = () => {
+    const newState = !isVoiceMode;
+    setIsVoiceMode(newState);
+    voiceModeRef.current = newState;
+    if (newState) {
+      startVoiceLoop();
+    } else {
+      stopSpeaking();
+    }
+  };
+
+  const handleSend = async (overrideInput = null, fromVoiceMode = false) => {
+    const textToSubmit = typeof overrideInput === 'string' ? overrideInput : input.trim();
+    if ((!textToSubmit && !attachedImage) || isLoading) return;
+
+    let userContent = textToSubmit || "What is in this image?";
     if (attachedImage) {
       userContent = [
         { type: "text", text: userContent },
@@ -40,11 +66,20 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     const userMessage = { role: 'user', content: userContent };
     const newMessages = [...messages, userMessage];
     onUpdateMessages(newMessages);
-    setInput('');
+    if (typeof overrideInput !== 'string') setInput('');
     setAttachedImage(null);
     setIsLoading(true);
 
     try {
+      let messagesToSend = newMessages;
+      if (fromVoiceMode) {
+        messagesToSend = [
+          ...messages,
+          { role: 'system', content: "You are in Voice Agent mode. Keep your answers brief (1-2 sentences), highly conversational, act like a friendly vocal tutor if asked about pronunciation, and do NOT use formatting/markdown." },
+          userMessage
+        ];
+      }
+
       // Connect to secure Vercel serverless function
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -52,7 +87,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          messages: newMessages
+          messages: messagesToSend
         })
       });
 
@@ -62,6 +97,11 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         if (data && data.choices) {
           const aiResponse = data.choices[0].message;
           onUpdateMessages([...newMessages, aiResponse]);
+          if (fromVoiceMode && voiceModeRef.current) {
+            speak(aiResponse.content, () => {
+              if (voiceModeRef.current) setTimeout(startVoiceLoop, 300);
+            });
+          }
           return;
         }
         throw new Error('Network response was not ok');
@@ -69,9 +109,20 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
 
       const aiResponse = data.choices[0].message;
       onUpdateMessages([...newMessages, aiResponse]);
+      
+      if (fromVoiceMode && voiceModeRef.current) {
+        speak(aiResponse.content, () => {
+          if (voiceModeRef.current) setTimeout(startVoiceLoop, 300);
+        });
+      }
     } catch (error) {
       console.error('Error fetching response:', error);
       onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Backend Connection Error:**\n\n${error.message}\n\n*If this says "Failed to fetch", you are probably on the wrong port (make sure URL is localhost:8888, not 5173). If it says "Unexpected token", the Netlify server crashed.*` }]);
+      if (fromVoiceMode && voiceModeRef.current) {
+        speak("I'm sorry, I encountered a connection error.", () => {
+          if (voiceModeRef.current) setTimeout(startVoiceLoop, 300);
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -391,8 +442,16 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             />
             
             <button 
+              onClick={toggleVoiceMode}
+              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isVoiceMode ? 'bg-purple-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
+              title={isVoiceMode ? "Stop Voice Agent" : "Start Voice Agent"}
+            >
+              <Headphones size={18} />
+            </button>
+            
+            <button 
               onClick={() => listen(setInput)}
-              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
+              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isListening && !isVoiceMode ? 'bg-red-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
               title="Speak to type"
             >
               <Mic size={18} />

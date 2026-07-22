@@ -16,7 +16,7 @@ export function useSpeech() {
     }
   }, []);
 
-  const speak = (text) => {
+  const speak = (text, onEndCallback) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel(); // Stop anything currently speaking
       const utterance = new SpeechSynthesisUtterance(text);
@@ -30,14 +30,17 @@ export function useSpeech() {
       }
       
       utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        if (onEndCallback) onEndCallback();
+      };
       utterance.onerror = () => setIsSpeaking(false);
       
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  const listen = (onResult) => {
+  const listen = (onResult, onCompleteCallback) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Speech recognition is not supported in this browser.");
@@ -48,20 +51,27 @@ export function useSpeech() {
     recognition.continuous = false;
     recognition.interimResults = false;
     
+    let finalTranscript = '';
+
     recognition.onstart = () => setIsListening(true);
     
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      onResult((prev) => prev ? prev + ' ' + transcript : transcript);
+      finalTranscript = event.results[0][0].transcript;
+      onResult((prev) => prev ? prev + ' ' + finalTranscript : finalTranscript);
     };
     
     recognition.onerror = (event) => {
       console.error(event.error);
       setIsListening(false);
+      if (onCompleteCallback) onCompleteCallback(null);
     };
     
     recognition.onend = () => {
       setIsListening(false);
+      if (onCompleteCallback) {
+        // Wait a small bit for state to settle, then fire complete
+        setTimeout(() => onCompleteCallback(finalTranscript), 100);
+      }
     };
     
     recognition.start();
