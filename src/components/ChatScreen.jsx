@@ -216,7 +216,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     <div className="flex flex-col h-full relative">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
-        <div className="max-w-3xl mx-auto w-full space-y-6 pt-8 pb-4">
+        <div className="max-w-2xl mx-auto w-full space-y-8 pt-8 pb-4">
           {messages.length === 0 ? (
             <div className="flex h-[80vh] items-center justify-center flex-col text-textMuted space-y-4 animate-fade-in">
               <Sparkles size={48} className="text-primary/50" />
@@ -247,12 +247,12 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
 
               return (
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                  <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 shadow-sm ${
+                  <div className={`rounded-2xl shadow-sm ${
                     msg.role === 'user' 
-                      ? 'bg-primary text-white ml-12 rounded-br-sm' 
-                      : 'bg-panel border border-border/50 text-textMain mr-12 rounded-bl-sm'
+                      ? 'bg-primary text-white ml-12 rounded-br-sm px-5 py-3 max-w-[85%]' 
+                      : 'bg-panel/80 backdrop-blur-md border border-border/50 text-textMain mr-8 rounded-xl px-6 py-5 w-full'
                   }`}>
-                    <div id={`msg-content-${idx}`}>
+                    <div id={`msg-content-${idx}`} className={msg.role === 'user' ? 'text-[15px]' : 'text-[15px] leading-relaxed'}>
                       {Array.isArray(msg.content) ? (
                         <div>
                           <MarkdownRenderer content={msg.content.find(c => c.type === 'text')?.text || ''} />
@@ -334,7 +334,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
 
       {/* Input Area */}
       <div className="p-4 bg-gradient-to-t from-white/80 via-white/50 dark:from-[#0a0a0f]/80 dark:via-[#0a0a0f]/50 to-transparent pt-10 backdrop-blur-[2px]">
-        <div className="max-w-3xl mx-auto relative">
+        <div className="max-w-2xl mx-auto relative">
           
           {/* Attachment Menu Popup */}
           {showAttachMenu && (
