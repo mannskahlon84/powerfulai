@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, Headphones } from 'lucide-react';
+import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, Headphones, Activity } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
+import { useGeminiLive } from '../hooks/useGeminiLive';
 import MarkdownRenderer from './MarkdownRenderer';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
@@ -17,8 +18,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const { speak, stopSpeaking, isSpeaking, listen, isListening } = useSpeech();
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const voiceModeRef = useRef(false);
+  const { connectLive, disconnectLive, isLive, status: liveStatus } = useGeminiLive();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,26 +28,11 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const startVoiceLoop = () => {
-    if (!voiceModeRef.current) return;
-    listen(setInput, async (transcript) => {
-      if (!voiceModeRef.current) return;
-      if (transcript && transcript.trim()) {
-        await handleSend(transcript.trim(), true);
-      } else {
-        setTimeout(startVoiceLoop, 500);
-      }
-    });
-  };
-
   const toggleVoiceMode = () => {
-    const newState = !isVoiceMode;
-    setIsVoiceMode(newState);
-    voiceModeRef.current = newState;
-    if (newState) {
-      startVoiceLoop();
+    if (isLive) {
+      disconnectLive();
     } else {
-      stopSpeaking();
+      connectLive();
     }
   };
 
@@ -72,13 +57,6 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
 
     try {
       let messagesToSend = newMessages;
-      if (fromVoiceMode) {
-        messagesToSend = [
-          ...messages,
-          { role: 'system', content: "You are in Voice Agent mode. Keep your answers brief (1-2 sentences), highly conversational, act like a friendly vocal tutor if asked about pronunciation, and do NOT use formatting/markdown." },
-          userMessage
-        ];
-      }
 
       // Connect to secure Vercel serverless function
       const response = await fetch('/api/chat', {
@@ -97,11 +75,6 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         if (data && data.choices) {
           const aiResponse = data.choices[0].message;
           onUpdateMessages([...newMessages, aiResponse]);
-          if (fromVoiceMode && voiceModeRef.current) {
-            speak(aiResponse.content, () => {
-              if (voiceModeRef.current) setTimeout(startVoiceLoop, 300);
-            });
-          }
           return;
         }
         throw new Error('Network response was not ok');
@@ -109,20 +82,9 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
 
       const aiResponse = data.choices[0].message;
       onUpdateMessages([...newMessages, aiResponse]);
-      
-      if (fromVoiceMode && voiceModeRef.current) {
-        speak(aiResponse.content, () => {
-          if (voiceModeRef.current) setTimeout(startVoiceLoop, 300);
-        });
-      }
     } catch (error) {
       console.error('Error fetching response:', error);
       onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Backend Connection Error:**\n\n${error.message}\n\n*If this says "Failed to fetch", you are probably on the wrong port (make sure URL is localhost:8888, not 5173). If it says "Unexpected token", the Netlify server crashed.*` }]);
-      if (fromVoiceMode && voiceModeRef.current) {
-        speak("I'm sorry, I encountered a connection error.", () => {
-          if (voiceModeRef.current) setTimeout(startVoiceLoop, 300);
-        });
-      }
     } finally {
       setIsLoading(false);
     }
@@ -268,7 +230,21 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 scroll-smooth">
         <div className="max-w-2xl mx-auto w-full space-y-8 pt-8 pb-4">
-          {messages.length === 0 ? (
+          {isLive ? (
+            <div className="flex h-[80vh] items-center justify-center flex-col text-textMuted space-y-6 animate-fade-in">
+              <div className="relative">
+                <div className="absolute inset-0 bg-purple-500/20 blur-xl rounded-full animate-pulse"></div>
+                <div className="w-32 h-32 bg-panel border-4 border-purple-500/50 rounded-full flex items-center justify-center relative z-10 shadow-2xl">
+                  <Activity size={48} className="text-purple-400 animate-pulse" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold text-white tracking-wide">Gemini Live Audio</h2>
+              <p className="text-purple-400 font-medium px-4 py-1.5 bg-purple-500/10 rounded-full border border-purple-500/20 shadow-sm">{liveStatus}</p>
+              <p className="text-sm text-textMuted max-w-sm text-center">
+                You are now in a real-time voice call. Speak naturally to Gemini, and you can interrupt it at any time!
+              </p>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex h-[80vh] items-center justify-center flex-col text-textMuted space-y-4 animate-fade-in">
               <Sparkles size={48} className="text-primary/50" />
               <h2 className="text-2xl font-medium text-textMain">How can I help you today?</h2>
@@ -443,15 +419,15 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             
             <button 
               onClick={toggleVoiceMode}
-              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isVoiceMode ? 'bg-purple-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
-              title={isVoiceMode ? "Stop Voice Agent" : "Start Voice Agent"}
+              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isLive ? 'bg-purple-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
+              title={isLive ? "Stop Voice Agent" : "Start Voice Agent"}
             >
               <Headphones size={18} />
             </button>
             
             <button 
               onClick={() => listen(setInput)}
-              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isListening && !isVoiceMode ? 'bg-red-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
+              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isListening && !isLive ? 'bg-red-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
               title="Speak to type"
             >
               <Mic size={18} />
