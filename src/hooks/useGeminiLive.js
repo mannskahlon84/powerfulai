@@ -42,6 +42,7 @@ export function useGeminiLive() {
   const audioContextRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const audioProcessorRef = useRef(null);
+  const setupCompleteRef = useRef(false);
   
   // Playback queue and state
   const audioQueueRef = useRef([]);
@@ -91,6 +92,7 @@ export function useGeminiLive() {
       audioProcessorRef.current.disconnect();
       audioProcessorRef.current = null;
     }
+    setupCompleteRef.current = false;
     setIsLive(false);
     setStatus('Disconnected');
   }, []);
@@ -149,9 +151,8 @@ export function useGeminiLive() {
           }
         }));
 
-        // Start processing microphone input
+        // Start processing microphone input but WAIT to send until setupComplete
         const source = audioContextRef.current.createMediaStreamSource(stream);
-        // Using ScriptProcessorNode for simplicity/compatibility (AudioWorklet is better but requires separate file)
         const processor = audioContextRef.current.createScriptProcessor(2048, 1, 1);
         audioProcessorRef.current = processor;
         
@@ -160,6 +161,7 @@ export function useGeminiLive() {
         
         processor.onaudioprocess = (e) => {
           if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+          if (!setupCompleteRef.current) return; // Very important: Wait for server
           
           const inputData = e.inputBuffer.getChannelData(0);
           const pcm16 = floatTo16BitPCM(inputData);
@@ -179,6 +181,12 @@ export function useGeminiLive() {
       wsRef.current.onmessage = (event) => {
         try {
           const response = JSON.parse(event.data);
+          
+          if (response.setupComplete) {
+            console.log("Setup complete received!");
+            setupCompleteRef.current = true;
+          }
+          
           if (response.serverContent && response.serverContent.modelTurn) {
             const parts = response.serverContent.modelTurn.parts;
             for (let part of parts) {
@@ -198,8 +206,22 @@ export function useGeminiLive() {
         setStatus('Connection Error');
       };
       
-      wsRef.current.onclose = () => {
-        disconnectLive();
+      wsRef.current.onclose = (event) => {
+        console.log("WebSocket closed", event.code, event.reason);
+        if (event.code !== 1000 && event.code !== 1005) {
+          // If it was a crash/error, keep the UI up so the user can see the status
+          setStatus(`Closed: ${event.code} ${event.reason}`);
+          
+          // Cleanup tracks but don't force isLive to false so the error stays visible
+          if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+          }
+          if (audioProcessorRef.current) {
+            audioProcessorRef.current.disconnect();
+          }
+        } else {
+          disconnectLive();
+        }
       };
 
     } catch (error) {
