@@ -238,10 +238,10 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
                   <Activity size={48} className="text-blue-400 animate-pulse" />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-white tracking-wide">Gemini Live Audio</h2>
+              <h2 className="text-2xl font-bold text-white tracking-wide">Live Voice Agent</h2>
               <p className="text-blue-400 font-medium px-4 py-1.5 bg-blue-500/10 rounded-full border border-blue-500/20 shadow-sm">{liveStatus}</p>
               <p className="text-sm text-textMuted max-w-sm text-center">
-                You are now in a real-time voice call. Speak naturally to Gemini, and you can interrupt it at any time!
+                You are now in a real-time voice call. Speak naturally to your personal AI agent, and you can interrupt it at any time!
               </p>
             </div>
           ) : messages.length === 0 ? (
