@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, Headphones, Activity } from 'lucide-react';
+import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, AudioLines, Activity } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -422,7 +422,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isLive ? 'bg-purple-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
               title={isLive ? "Stop Voice Agent" : "Start Voice Agent"}
             >
-              <Headphones size={18} />
+              <AudioLines size={18} />
             </button>
             
             <button 
