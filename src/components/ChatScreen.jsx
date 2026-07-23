@@ -233,13 +233,13 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
           {isLive ? (
             <div className="flex h-[80vh] items-center justify-center flex-col text-textMuted space-y-6 animate-fade-in">
               <div className="relative">
-                <div className="absolute inset-0 bg-purple-500/20 blur-xl rounded-full animate-pulse"></div>
-                <div className="w-32 h-32 bg-panel border-4 border-purple-500/50 rounded-full flex items-center justify-center relative z-10 shadow-2xl">
-                  <Activity size={48} className="text-purple-400 animate-pulse" />
+                <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse"></div>
+                <div className="w-32 h-32 bg-panel border-4 border-blue-500/50 rounded-full flex items-center justify-center relative z-10 shadow-2xl">
+                  <Activity size={48} className="text-blue-400 animate-pulse" />
                 </div>
               </div>
               <h2 className="text-2xl font-bold text-white tracking-wide">Gemini Live Audio</h2>
-              <p className="text-purple-400 font-medium px-4 py-1.5 bg-purple-500/10 rounded-full border border-purple-500/20 shadow-sm">{liveStatus}</p>
+              <p className="text-blue-400 font-medium px-4 py-1.5 bg-blue-500/10 rounded-full border border-blue-500/20 shadow-sm">{liveStatus}</p>
               <p className="text-sm text-textMuted max-w-sm text-center">
                 You are now in a real-time voice call. Speak naturally to Gemini, and you can interrupt it at any time!
               </p>
@@ -419,7 +419,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             
             <button 
               onClick={toggleVoiceMode}
-              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isLive ? 'bg-purple-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
+              className={`p-3 rounded-full transition-all flex-shrink-0 mr-1 shadow-md ${isLive ? 'bg-blue-500 text-white animate-pulse' : 'bg-panel border border-border/50 text-textMuted hover:text-textMain hover:bg-black/5 dark:hover:bg-white/5'}`}
               title={isLive ? "Stop Voice Agent" : "Start Voice Agent"}
             >
               <AudioLines size={18} />
