@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import ChatScreen from './components/ChatScreen';
 import LoginScreen from './components/LoginScreen';
 import SettingsModal from './components/SettingsModal';
+import { Menu, Zap } from 'lucide-react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -13,6 +14,7 @@ function App() {
   });
   const [authLoading, setAuthLoading] = useState(!localStorage.getItem('mockUser'));
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   const [chatHistory, setChatHistory] = useState(() => {
     const saved = localStorage.getItem('chatHistory');
@@ -102,16 +104,30 @@ function App() {
       
       {/* Main Content Layer */}
       <div className="relative z-10 flex h-full w-full">
-        <Sidebar 
-          chatHistory={chatHistory} 
-          activeChatId={activeChatId} 
-          onSelectChat={setActiveChatId}
-          onDeleteChat={handleDeleteChat}
-          onNewChat={handleNewChat}
-          user={user}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-        />
-        <div className="flex-1 flex flex-col relative h-full">
+        <div className={`transition-all duration-300 ease-in-out h-full flex-shrink-0 ${isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+          <Sidebar 
+            chatHistory={chatHistory} 
+            activeChatId={activeChatId} 
+            onSelectChat={setActiveChatId}
+            onDeleteChat={handleDeleteChat}
+            onNewChat={handleNewChat}
+            user={user}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onCloseSidebar={() => setIsSidebarOpen(false)}
+          />
+        </div>
+        
+        <div className="flex-1 flex flex-col relative h-full w-full max-w-full">
+          {!isSidebarOpen && (
+            <div className="absolute top-4 left-4 z-50 group flex items-center gap-3">
+              <div 
+                className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shadow-lg shadow-primary/20 cursor-pointer hover:opacity-90 transition-opacity"
+              >
+                <Zap size={20} className="text-white fill-white/20 group-hover:hidden" />
+                <Menu size={20} className="text-white hidden group-hover:block" onClick={() => setIsSidebarOpen(true)} />
+              </div>
+            </div>
+          )}
           <ChatScreen 
             messages={activeChat.messages} 
             onUpdateMessages={handleUpdateMessages} 

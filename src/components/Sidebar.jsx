@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, MessageSquare, Settings, LogOut, User, Zap, Trash2, Sun, Moon } from 'lucide-react';
+import { Plus, MessageSquare, Settings, LogOut, User, Zap, Trash2, Sun, Moon, Menu } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 
-export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDeleteChat, onNewChat, user, onOpenSettings }) {
+export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDeleteChat, onNewChat, user, onOpenSettings, onCloseSidebar }) {
   const [isDark, setIsDark] = useState(() => {
     return document.documentElement.classList.contains('dark') || false;
   });
@@ -18,11 +18,20 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
 
   return (
     <div className="w-64 bg-panel/60 backdrop-blur-md border-r border-border/50 flex flex-col h-full flex-shrink-0 relative z-20">
-      <div className="p-5 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center shadow-lg shadow-primary/20">
-          <Zap size={18} className="text-white fill-white/20" />
+      <div className="p-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shadow-lg shadow-primary/20">
+            <Zap size={18} className="text-white fill-white/20" />
+          </div>
+          <h1 className="text-lg font-bold text-textMain">Powerful AI</h1>
         </div>
-        <h1 className="text-lg font-bold text-textMain">Powerful AI</h1>
+        <button 
+          onClick={onCloseSidebar}
+          className="text-textMuted hover:text-textMain p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          title="Close Sidebar"
+        >
+          <Menu size={20} />
+        </button>
       </div>
 
       <div className="px-4 pb-4">
