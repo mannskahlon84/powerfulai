@@ -86,7 +86,7 @@ export default async function handler(req, res) {
         let imageUrl = "";
         let generatorName = "";
         const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
-        const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-fastapi-app.modal.run/v1').replace(/\/$/, '');
+        const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-fastapi-app-fastapi-app.modal.run/v1').replace(/\/$/, '');
         let modalSuccess = false;
         let modalError = "Unknown error";
         let openAiError = "";
