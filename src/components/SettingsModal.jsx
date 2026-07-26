@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   X, Mic, User, Sparkles, Activity, Sun, Moon, 
   Trash2, Download, MapPin, Sliders, HelpCircle, 
-  Share2, Crown, Check, Key, Eye, EyeOff
+  Share2, Crown, Check, Key, Eye, EyeOff, Upload
 } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 
@@ -37,6 +37,50 @@ export default function SettingsModal({ isOpen, onClose }) {
     localStorage.removeItem('customGeminiApiKey');
     setCustomVoiceKey('');
     setKeySaved(false);
+  };
+
+  const [avatarHandle, setAvatarHandle] = useState(() => {
+    const saved = localStorage.getItem('customUserAvatar');
+    if (saved) {
+      try { return JSON.parse(saved).handle || '@manpreet'; } catch (e) { return '@manpreet'; }
+    }
+    return '@manpreet';
+  });
+  const [avatarDesc, setAvatarDesc] = useState(() => {
+    const saved = localStorage.getItem('customUserAvatar');
+    if (saved) {
+      try { return JSON.parse(saved).description || ''; } catch (e) { return ''; }
+    }
+    return 'A handsome young Indian man in his late 20s with a modern neat hairstyle, sharp jawline, well-groomed dark beard, charismatic smile, cinematic 8k realism';
+  });
+  const [avatarPhoto, setAvatarPhoto] = useState(() => {
+    const saved = localStorage.getItem('customUserAvatar');
+    if (saved) {
+      try { return JSON.parse(saved).photoUrl || ''; } catch (e) { return ''; }
+    }
+    return '';
+  });
+  const [avatarSaved, setAvatarSaved] = useState(false);
+
+  const handleSaveAvatar = () => {
+    localStorage.setItem('customUserAvatar', JSON.stringify({
+      handle: avatarHandle.startsWith('@') ? avatarHandle : `@${avatarHandle}`,
+      description: avatarDesc.trim(),
+      photoUrl: avatarPhoto
+    }));
+    setAvatarSaved(true);
+    setTimeout(() => setAvatarSaved(false), 3000);
+  };
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarPhoto(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   if (!isOpen) return null;
@@ -313,6 +357,83 @@ export default function SettingsModal({ isOpen, onClose }) {
                     <p className="text-xs text-slate-600 dark:text-textMuted">{item.desc}</p>
                   </button>
                 ))}
+              </div>
+
+              {/* CUSTOM AI FACE CLONE (@AVATAR) */}
+              <div className="pt-4 border-t border-slate-200 dark:border-border/50">
+                <div className="bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 p-5 rounded-2xl border border-blue-500/20 dark:border-blue-400/30 space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      {avatarPhoto ? (
+                        <img src={avatarPhoto} alt="Avatar" className="w-12 h-12 rounded-full object-cover border-2 border-primary shadow-md" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg border border-primary/30">
+                          {avatarHandle ? avatarHandle.charAt(avatarHandle.startsWith('@') ? 1 : 0).toUpperCase() : '@'}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          AI Face Clone (@Avatar)
+                          <span className="text-[10px] bg-primary text-white px-2 py-0.5 rounded-full font-extrabold uppercase">New</span>
+                        </h4>
+                        <p className="text-xs text-slate-600 dark:text-textMuted">
+                          Clone your likeness! Use your handle (e.g. <code>{avatarHandle}</code>) in any image prompt.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Avatar Handle (Tag Name)
+                      </label>
+                      <input
+                        type="text"
+                        value={avatarHandle}
+                        onChange={(e) => setAvatarHandle(e.target.value)}
+                        placeholder="@manpreet"
+                        className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-border/50 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Face Reference Photo (Optional)
+                      </label>
+                      <label className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold rounded-xl border border-dashed border-slate-300 dark:border-border/50 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer hover:border-primary transition-colors">
+                        <Upload size={14} className="text-primary" />
+                        {avatarPhoto ? 'Change Reference Photo' : 'Upload Face Photo'}
+                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Facial & Appearance Likeness Prompt
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={avatarDesc}
+                      onChange={(e) => setAvatarDesc(e.target.value)}
+                      placeholder="Describe your face, age, hairstyle, beard, smile, and lighting..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-border/50 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      {avatarSaved ? '✓ Avatar Likeness Saved! Try typing @manpreet in Chat.' : ''}
+                    </span>
+                    <button
+                      onClick={handleSaveAvatar}
+                      className="px-5 py-2 bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                    >
+                      <Check size={14} />
+                      Save AI Avatar
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

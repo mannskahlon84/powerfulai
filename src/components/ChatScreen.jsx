@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, AudioLines, Activity } from 'lucide-react';
+import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, AudioLines, Activity, User } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -46,6 +46,26 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         { type: "text", text: userContent },
         { type: "image_url", image_url: { url: attachedImage } }
       ];
+    }
+
+    // Check for AI Avatar Face Clone likeness (@manpreet or custom handle)
+    let avatarHandleTag = '@manpreet';
+    let avatarLikeness = 'A handsome young Indian man in his late 20s with a neat modern hairstyle, sharp jawline, well-groomed dark beard, charismatic smile, cinematic 8k realism';
+    try {
+      const savedAvatar = localStorage.getItem('customUserAvatar');
+      if (savedAvatar) {
+        const parsed = JSON.parse(savedAvatar);
+        if (parsed.handle) avatarHandleTag = parsed.handle;
+        if (parsed.description) avatarLikeness = parsed.description;
+      }
+    } catch(e) {}
+
+    if (typeof userContent === 'string' && userContent.toLowerCase().includes(avatarHandleTag.toLowerCase())) {
+      const enhancedPrompt = userContent.replace(
+        new RegExp(avatarHandleTag, 'gi'),
+        `[CHARACTER LIKENESS: ${avatarLikeness}]`
+      );
+      userContent = `[IMAGE_PROMPT: ${enhancedPrompt}]`;
     }
 
     const userMessage = { role: 'user', content: userContent };
@@ -178,6 +198,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     { icon: File, label: 'Upload files', color: 'text-purple-400', action: () => handleMenuAction('files') },
     { icon: Image, label: 'Upload photos', color: 'text-green-400', action: () => handleMenuAction('photos') },
     { icon: Sparkles, label: 'Create image', color: 'text-yellow-400', action: () => handleMenuAction('Generate an image of ') },
+    { icon: User, label: 'Create clone (@manpreet)', color: 'text-cyan-400', action: () => handleMenuAction('Generate an ultra realistic cinematic photo of @manpreet ') },
     { icon: Video, label: 'Create video', color: 'text-pink-400', action: () => handleMenuAction('Generate a video script for ') },
     { icon: Music, label: 'Create song', color: 'text-orange-400', action: () => handleMenuAction('Write a song about ') },
   ];
@@ -412,6 +433,14 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               >
                 <Plus size={14} className="rotate-45" />
               </button>
+            </div>
+          )}
+
+          {/* AI Avatar Face Clone Live Tag Detection Badge */}
+          {input.toLowerCase().includes('@') && (
+            <div className="mb-2.5 ml-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-lg animate-fade-in border border-blue-400/30">
+              <Sparkles size={14} className="animate-spin text-yellow-300" />
+              <span>✨ AI Avatar Likeness Detected! Realism Clone enabled for @tag</span>
             </div>
           )}
 
