@@ -52,8 +52,8 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
             onClick={() => onSelectChat(chat.id)}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-colors text-left group ${
               activeChatId === chat.id 
-                ? 'bg-border/60 text-white' 
-                : 'text-textMuted hover:bg-border/30 hover:text-white'
+                ? 'bg-blue-500/15 text-blue-700 dark:bg-white/10 dark:text-white font-semibold shadow-sm' 
+                : 'text-slate-700 dark:text-textMuted hover:bg-black/5 dark:hover:bg-white/5 hover:text-slate-950 dark:hover:text-white font-medium'
             }`}
           >
             <div className="flex items-center gap-3 overflow-hidden">
@@ -62,7 +62,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
             </div>
             <Trash2 
               size={14} 
-              className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all flex-shrink-0" 
+              className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all flex-shrink-0" 
               onClick={(e) => onDeleteChat(e, chat.id)}
             />
           </button>
@@ -79,7 +79,7 @@ export default function Sidebar({ chatHistory, activeChatId, onSelectChat, onDel
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-white truncate">{user.displayName || 'User'}</p>
+            <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">{user.displayName || 'User'}</p>
             <p className="text-xs text-textMuted truncate">{user.email}</p>
           </div>
         </div>
