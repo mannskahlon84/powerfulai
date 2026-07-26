@@ -98,200 +98,75 @@ export function useGeminiLive() {
   }, []);
 
   const connectLive = useCallback(async () => {
-    setStatus('Fetching Key...');
-    let apiKey = localStorage.getItem('customGeminiApiKey') || '';
-    
-    if (!apiKey) {
-      try {
-        const res = await fetch('/api/get-voice-key', { method: 'POST' });
-        if (!res.ok) throw new Error('Failed to get API key');
-        const data = await res.json();
-        apiKey = data.key || '';
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    console.log('Starting Live Voice Agent exclusively via Modal Custom AI backend (/api/chat + Web Speech Engine)...');
+    setIsLive(true);
+    setStatus('Live (Modal Custom AI Voice Agent)');
 
-    // If key is NOT a Google Gemini key (e.g., custom Modal key or missing AIza key), use Modal Live Voice Agent mode!
-    const isGoogleKey = typeof apiKey === 'string' && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'));
-    if (!isGoogleKey) {
-      console.log('Using custom Modal AI Voice Agent mode (/api/chat + Browser Speech Engine)');
-      setIsLive(true);
-      setStatus('Live (Modal Voice Agent)');
-
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        setStatus('Browser Speech Not Supported');
-        return;
-      }
-
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.lang = 'en-US';
-
-      rec.onresult = async (event) => {
-        const lastIndex = event.results.length - 1;
-        const transcript = event.results[lastIndex][0].transcript.trim();
-        if (!transcript) return;
-
-        setStatus('Thinking (Modal AI)...');
-        try {
-          const chatRes = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [{ role: 'user', content: transcript }],
-              model: 'default'
-            })
-          });
-          const chatData = await chatRes.json();
-          const replyText = chatData.reply || "I am listening to your voice agent request.";
-
-          setStatus('Speaking...');
-          if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(replyText);
-            utterance.onend = () => {
-              if (wsRef.current) setStatus('Live (Modal Voice Agent)');
-            };
-            window.speechSynthesis.speak(utterance);
-          }
-        } catch (err) {
-          console.error("Modal AI Voice Error:", err);
-          setStatus('Live (Modal Voice Agent)');
-        }
-      };
-
-      rec.onerror = (e) => {
-        console.warn("Speech recognition error:", e.error);
-        if (e.error === 'not-allowed') setStatus('Mic Permission Denied');
-      };
-
-      try {
-        rec.start();
-        // Store recognition object in wsRef so disconnectLive can clean it up
-        wsRef.current = {
-          close: () => {
-            try { rec.stop(); } catch (e) {}
-            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-          }
-        };
-      } catch (e) {
-        console.error("Failed to start speech recognition:", e);
-        setStatus('Microphone Error');
-        setIsLive(false);
-      }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setStatus('Browser Speech Recognition Not Supported in this browser');
+      setIsLive(false);
       return;
     }
 
-    // Otherwise, use Google Gemini WebSocket if AIza key is present
-    setStatus('Connecting Mic...');
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = 'en-US';
+
+    rec.onresult = async (event) => {
+      const lastIndex = event.results.length - 1;
+      const transcript = event.results[lastIndex][0].transcript.trim();
+      if (!transcript) return;
+
+      setStatus('Thinking (Modal Custom AI)...');
+      try {
+        const chatRes = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: transcript }],
+            model: 'default'
+          })
+        });
+        const chatData = await chatRes.json();
+        const replyText = chatData.reply || "I am listening to your request.";
+
+        setStatus('Speaking (Modal Custom AI)...');
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(replyText);
+          utterance.onend = () => {
+            if (wsRef.current) setStatus('Live (Modal Custom AI Voice Agent)');
+          };
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch (err) {
+        console.error("Modal AI Voice Error:", err);
+        setStatus('Live (Modal Custom AI Voice Agent)');
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.warn("Speech recognition error:", e.error);
+      if (e.error === 'not-allowed') setStatus('Mic Permission Denied');
+    };
+
     try {
-      await initAudioPlayback();
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true
-        } 
-      });
-      mediaStreamRef.current = stream;
-
-      setStatus('Connecting WebSocket...');
-      const model = 'models/gemini-live-2.5-flash-native-audio';
-      const cleanKey = String(apiKey).replace(/[\[\]"'\s]/g, '').trim();
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(cleanKey)}`;
-      
-      wsRef.current = new WebSocket(wsUrl);
-      
-      wsRef.current.onopen = () => {
-        setIsLive(true);
-        setStatus('Live (Speaking & Listening)');
-        
-        wsRef.current.send(JSON.stringify({
-          setup: {
-            model: model,
-            generationConfig: {
-              responseModalities: ["AUDIO"]
-            }
-          }
-        }));
-
-        const source = audioContextRef.current.createMediaStreamSource(stream);
-        const processor = audioContextRef.current.createScriptProcessor(2048, 1, 1);
-        audioProcessorRef.current = processor;
-        
-        source.connect(processor);
-        processor.connect(audioContextRef.current.destination);
-        
-        processor.onaudioprocess = (e) => {
-          if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-          if (!setupCompleteRef.current) return;
-          
-          const inputData = e.inputBuffer.getChannelData(0);
-          const pcm16 = floatTo16BitPCM(inputData);
-          const base64Data = int16ToBase64(pcm16);
-          
-          wsRef.current.send(JSON.stringify({
-            realtimeInput: {
-              mediaChunks: [{
-                mimeType: "audio/pcm;rate=16000",
-                data: base64Data
-              }]
-            }
-          }));
-        };
-      };
-      
-      wsRef.current.onmessage = (event) => {
-        try {
-          const response = JSON.parse(event.data);
-          if (response.setupComplete) {
-            setupCompleteRef.current = true;
-          }
-          if (response.serverContent && response.serverContent.modelTurn) {
-            const parts = response.serverContent.modelTurn.parts;
-            for (let part of parts) {
-              if (part.inlineData && part.inlineData.data) {
-                const float32Audio = base64ToFloat32(part.inlineData.data);
-                playAudioChunk(float32Audio);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Error parsing WS message:", err);
+      rec.start();
+      // Store recognition object in wsRef so disconnectLive can clean it up
+      wsRef.current = {
+        close: () => {
+          try { rec.stop(); } catch (e) {}
+          if ('speechSynthesis' in window) window.speechSynthesis.cancel();
         }
       };
-      
-      wsRef.current.onerror = (error) => {
-        console.error("WebSocket Error:", error);
-        setStatus('Connection Error');
-      };
-      
-      wsRef.current.onclose = (event) => {
-        console.log("WebSocket closed", event.code, event.reason);
-        if (event.code !== 1000 && event.code !== 1005) {
-          setStatus(`Closed: ${event.code} ${event.reason}`);
-          if (mediaStreamRef.current) {
-            mediaStreamRef.current.getTracks().forEach(track => track.stop());
-          }
-          if (audioProcessorRef.current) {
-            audioProcessorRef.current.disconnect();
-          }
-        } else {
-          disconnectLive();
-        }
-      };
-
-    } catch (error) {
-      console.error("Failed to start live session:", error);
-      setStatus('Microphone/Connection Error');
-      disconnectLive();
+    } catch (e) {
+      console.error("Failed to start speech recognition:", e);
+      setStatus('Microphone Error');
+      setIsLive(false);
     }
-  }, [disconnectLive, initAudioPlayback, playAudioChunk]);
+  }, [disconnectLive]);
 
   return { connectLive, disconnectLive, isLive, status };
 }
