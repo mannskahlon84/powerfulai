@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   X, Mic, User, Sparkles, Activity, Sun, Moon, 
   Trash2, Download, MapPin, Sliders, HelpCircle, 
-  Share2, Crown, Check
+  Share2, Crown, Check, Key, Eye, EyeOff
 } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 
@@ -19,8 +19,25 @@ export default function SettingsModal({ isOpen, onClose }) {
     return document.documentElement.classList.contains('dark');
   });
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [customVoiceKey, setCustomVoiceKey] = useState(() => {
+    return localStorage.getItem('customGeminiApiKey') || '';
+  });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
 
   const savedVoice = localStorage.getItem('selectedVoiceURI') || '';
+
+  const handleSaveVoiceKey = () => {
+    localStorage.setItem('customGeminiApiKey', customVoiceKey.trim());
+    setKeySaved(true);
+    setTimeout(() => setKeySaved(false), 3000);
+  };
+
+  const handleClearVoiceKey = () => {
+    localStorage.removeItem('customGeminiApiKey');
+    setCustomVoiceKey('');
+    setKeySaved(false);
+  };
 
   if (!isOpen) return null;
 
@@ -160,6 +177,66 @@ export default function SettingsModal({ isOpen, onClose }) {
                 <p className="text-xs text-slate-500 dark:text-textMuted mt-3 leading-relaxed">
                   The dropdown text colors are now automatically styled to match both Light and Dark themes for high readability.
                 </p>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-background rounded-2xl p-5 border border-slate-200 dark:border-border/50">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-textMuted flex items-center gap-2">
+                    <Key size={14} className="text-primary" />
+                    Custom Gemini Voice API Key (Override)
+                  </label>
+                  {customVoiceKey && (
+                    <span className="text-[11px] px-2 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full font-semibold">
+                      Custom Key Active
+                    </span>
+                  )}
+                </div>
+                
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={customVoiceKey}
+                    onChange={(e) => setCustomVoiceKey(e.target.value)}
+                    placeholder="AIzaSy... (Paste your Gemini API Key here)"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-border/80 rounded-xl pl-4 pr-10 py-3 text-sm text-slate-900 dark:text-white font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+                  >
+                    {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-xs text-slate-500 dark:text-textMuted leading-relaxed">
+                    Override the default server key. Saved securely in your browser's local storage.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {customVoiceKey && (
+                      <button
+                        onClick={handleClearVoiceKey}
+                        className="px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button
+                      onClick={handleSaveVoiceKey}
+                      className="px-4 py-1.5 bg-primary hover:bg-indigo-600 text-white text-xs font-medium rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                    >
+                      {keySaved ? (
+                        <>
+                          <Check size={14} />
+                          Saved!
+                        </>
+                      ) : (
+                        'Save Key'
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

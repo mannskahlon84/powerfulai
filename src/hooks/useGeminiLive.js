@@ -99,16 +99,19 @@ export function useGeminiLive() {
 
   const connectLive = useCallback(async () => {
     setStatus('Fetching Key...');
-    let apiKey = '';
-    try {
-      const res = await fetch('/api/get-voice-key', { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to get API key');
-      const data = await res.json();
-      apiKey = data.key;
-    } catch (e) {
-      console.error(e);
-      setStatus('Failed to get API key');
-      return;
+    let apiKey = localStorage.getItem('customGeminiApiKey') || '';
+    
+    if (!apiKey) {
+      try {
+        const res = await fetch('/api/get-voice-key', { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to get API key');
+        const data = await res.json();
+        apiKey = data.key;
+      } catch (e) {
+        console.error(e);
+        setStatus('Failed to get API key');
+        return;
+      }
     }
 
     if (!apiKey) {
