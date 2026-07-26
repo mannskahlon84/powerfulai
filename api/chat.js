@@ -88,7 +88,8 @@ export default async function handler(req, res) {
         const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
         const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-fastapi-app.modal.run/v1').replace(/\/$/, '');
         let modalSuccess = false;
-        let lastModalError = "Unknown error";
+        let modalError = "Unknown error";
+        let openAiError = "";
 
         // Priority 1: Custom Modal GPU Image Gen App (automatic retry loop across endpoints with 20s timeout each)
         const tryEndpoints = [
@@ -123,50 +124,56 @@ export default async function handler(req, res) {
                 break;
               }
             } else {
-              lastModalError = `HTTP ${modalRes.status} (${modalRes.statusText})`;
+              modalError = `HTTP ${modalRes.status} (${modalRes.statusText})`;
             }
           } catch (err) {
-            lastModalError = err.message;
+            modalError = err.message;
             console.log(`Modal endpoint ${targetUrl} failed:`, err.message);
           }
         }
 
-        // Priority 2: Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
+        // Priority 2: Premium Engine: ChatGPT's DALL-E 3 or DALL-E 2 (Requires OPENAI_API_KEY)
         if (!modalSuccess && process.env.OPENAI_API_KEY) {
-          try {
-            console.log("Using Premium Engine: DALL-E 3");
-            const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
-              },
-              body: JSON.stringify({
-                model: "dall-e-3",
-                prompt: imagePrompt,
-                n: 1,
-                size: "1024x1024",
-                quality: "hd"
-              }),
-              signal: AbortSignal.timeout(25000)
-            });
-            const openAiData = await openAiRes.json();
-            if (openAiData.error) {
-              lastModalError = `DALL-E 3 Error: ${openAiData.error.message}`;
-            } else {
-              imageUrl = openAiData.data[0].url;
-              generatorName = "DALL-E 3 (Premium)";
-              modalSuccess = true;
+          for (const modelName of ["dall-e-3", "dall-e-2"]) {
+            try {
+              console.log(`Using Premium Engine: ${modelName}`);
+              const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
+                },
+                body: JSON.stringify({
+                  model: modelName,
+                  prompt: imagePrompt,
+                  n: 1,
+                  size: "1024x1024"
+                }),
+                signal: AbortSignal.timeout(25000)
+              });
+              const openAiData = await openAiRes.json();
+              if (openAiData.error) {
+                openAiError = openAiData.error.message;
+              } else {
+                imageUrl = openAiData.data[0].url;
+                generatorName = `${modelName.toUpperCase()} (Premium)`;
+                modalSuccess = true;
+                break;
+              }
+            } catch (err) {
+              openAiError = err.message;
+              console.log(`${modelName} fallback:`, err.message);
             }
-          } catch (err) {
-            lastModalError = `DALL-E 3 Error: ${err.message}`;
-            console.log("DALL-E 3 fallback:", err.message);
           }
         } 
         
         // NEVER fall back to Pollinations! If Modal & OpenAI fail, return a clear, actionable error message.
         if (!modalSuccess) {
-          data.choices[0].message.content = `🚨 **Modal GPU Image Engine Currently Unreachable**\n\nWe attempted to generate your photoshoot image using your custom Modal GPU service (\`${imageApiBaseUrl}\`), but the server could not be reached or returned an error (\`${lastModalError}\`).\n\n**Why did this happen?**\n- Your Modal Serverless GPU container (\`image-gen-fastapi-app\`) may be stopped or scaling up from zero.\n- The endpoint URL path might be different than expected.\n\n**How to fix:**\n1. Check your Modal dashboard to ensure your \`image-gen-fastapi-app\` container is deployed and online.\n2. Once your container is warm, try submitting your prompt again!\n\n*(Original prompt: ${imagePrompt})*`;
+          let errDetail = `**Modal GPU Error:** \`${modalError}\``;
+          if (openAiError) {
+            errDetail += `\n**OpenAI Error:** \`${openAiError}\``;
+          }
+          data.choices[0].message.content = `🚨 **Modal GPU Image Engine Currently Unreachable**\n\nWe attempted to generate your photoshoot image using your custom Modal GPU service (\`${imageApiBaseUrl}\`), but the server could not be reached or returned an error.\n\n${errDetail}\n\n**Why did this happen?**\n- Your Modal Serverless GPU container (\`image-gen-fastapi-app\`) returned **404 Not Found** because that app name is not currently deployed on your Modal account, or has a different URL path.\n\n**How to fix:**\n1. Check your Modal dashboard (\`modal.com/apps\`) to see the exact URL of your running image generation app.\n2. In Vercel -> **Settings** -> **Environment Variables**, set **\`IMAGE_API_BASE_URL\`** to your exact Modal image app URL (or share the URL with us to update as default)!\n\n*(Original prompt: ${imagePrompt})*`;
         } else {
           data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
         }
