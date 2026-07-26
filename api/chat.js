@@ -144,11 +144,12 @@ export default async function handler(req, res) {
 
     if (groqFailed || requiresVision) {
       try {
-        if (!process.env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
+        const geminiKey = (process.env.VALID_API_KEYS || process.env.GEMINI_API_KEY || '').split(',')[0].replace(/[\[\]"']/g, '').trim();
+        if (!geminiKey) throw new Error("Missing GEMINI_API_KEY or VALID_API_KEYS");
         console.log('Attempting Gemini...');
         const data = await callProvider(
           'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-          process.env.GEMINI_API_KEY,
+          geminiKey,
           'gemini-1.5-flash'
         );
         if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));

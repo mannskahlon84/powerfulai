@@ -14,11 +14,29 @@ export default async function handler(req, res) {
     console.warn("Suspicious request to /api/get-voice-key from origin:", origin);
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not set on the server.' });
+  let rawKey = process.env.VALID_API_KEYS || process.env.GEMINI_API_KEY || '';
+  let apiKey = '';
+  try {
+    if (rawKey.trim().startsWith('[')) {
+      const parsed = JSON.parse(rawKey);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        apiKey = String(parsed[0]).trim();
+      }
+    }
+  } catch (e) {
+    // Not JSON, continue to normal parsing
+  }
+  if (!apiKey && rawKey) {
+    apiKey = rawKey.split(',')[0].replace(/[\[\]"']/g, '').trim();
+  } else if (apiKey) {
+    apiKey = apiKey.replace(/[\[\]"']/g, '').trim();
+  }
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'Neither VALID_API_KEYS nor GEMINI_API_KEY is set on the server.' });
   }
 
   return res.status(200).json({
-    key: process.env.GEMINI_API_KEY
+    key: apiKey
   });
 }
