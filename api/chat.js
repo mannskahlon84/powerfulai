@@ -104,7 +104,7 @@ export default async function handler(req, res) {
               n: 1,
               size: "1024x1024"
             }),
-            signal: AbortSignal.timeout(2500)
+            signal: AbortSignal.timeout(25000)
           });
           if (modalRes.ok) {
             const modalData = await modalRes.json();
@@ -191,7 +191,7 @@ export default async function handler(req, res) {
             prompt: musicPrompt,
             lyrics: musicPrompt
           }),
-          signal: AbortSignal.timeout(3000)
+          signal: AbortSignal.timeout(20000)
         });
         if (musicRes.ok) {
           const musicData = await musicRes.json();
