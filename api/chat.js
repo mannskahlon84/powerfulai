@@ -170,6 +170,7 @@ export default async function handler(req, res) {
         } else {
           data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
         }
+      }
     } catch (e) {
       console.error("Image intercept error:", e);
       data.choices[0].message.content = `🚨 **Internal Image Intercept Error:** ${e.message}\n\nOriginal prompt: ${messageStr}`;
