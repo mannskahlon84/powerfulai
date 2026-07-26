@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { 
   X, Mic, User, Sparkles, Activity, Sun, Moon, 
   Trash2, Download, MapPin, Sliders, HelpCircle, 
-  Share2, Crown, Check, Key, Eye, EyeOff, Upload
+  Share2, Crown, Check, Key, Eye, EyeOff, Upload, Camera
 } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
+import LiveFaceScannerModal from './LiveFaceScannerModal';
 
 export default function SettingsModal({ isOpen, onClose }) {
   const { voices, speak } = useSpeech();
@@ -61,6 +62,7 @@ export default function SettingsModal({ isOpen, onClose }) {
     return '';
   });
   const [avatarSaved, setAvatarSaved] = useState(false);
+  const [showFaceScanner, setShowFaceScanner] = useState(false);
 
   const handleSaveAvatar = () => {
     localStorage.setItem('customUserAvatar', JSON.stringify({
@@ -398,13 +400,23 @@ export default function SettingsModal({ isOpen, onClose }) {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Face Reference Photo (Optional)
+                        Face Biometric Scan or Photo
                       </label>
-                      <label className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs font-semibold rounded-xl border border-dashed border-slate-300 dark:border-border/50 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer hover:border-primary transition-colors">
-                        <Upload size={14} className="text-primary" />
-                        {avatarPhoto ? 'Change Reference Photo' : 'Upload Face Photo'}
-                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                      </label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowFaceScanner(true)}
+                          className="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-md transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <Camera size={14} />
+                          Live Face Scan
+                        </button>
+                        <label className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-dashed border-slate-300 dark:border-border/50 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer hover:border-primary transition-colors">
+                          <Upload size={14} className="text-primary" />
+                          Upload
+                          <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -611,6 +623,16 @@ export default function SettingsModal({ isOpen, onClose }) {
         </div>
 
       </div>
+
+      {/* Live AI Biometric Face Scanner Modal */}
+      <LiveFaceScannerModal
+        isOpen={showFaceScanner}
+        onClose={() => setShowFaceScanner(false)}
+        onCapture={(dataUrl) => {
+          setAvatarPhoto(dataUrl);
+        }}
+        avatarHandle={avatarHandle}
+      />
     </div>
   );
 }
