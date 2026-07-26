@@ -106,19 +106,86 @@ export function useGeminiLive() {
         const res = await fetch('/api/get-voice-key', { method: 'POST' });
         if (!res.ok) throw new Error('Failed to get API key');
         const data = await res.json();
-        apiKey = data.key;
+        apiKey = data.key || '';
       } catch (e) {
         console.error(e);
-        setStatus('Failed to get API key');
-        return;
       }
     }
 
-    if (!apiKey) {
-      setStatus('Missing API Key');
+    // If key is NOT a Google Gemini key (e.g., custom Modal key or missing AIza key), use Modal Live Voice Agent mode!
+    const isGoogleKey = typeof apiKey === 'string' && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'));
+    if (!isGoogleKey) {
+      console.log('Using custom Modal AI Voice Agent mode (/api/chat + Browser Speech Engine)');
+      setIsLive(true);
+      setStatus('Live (Modal Voice Agent)');
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setStatus('Browser Speech Not Supported');
+        return;
+      }
+
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+
+      rec.onresult = async (event) => {
+        const lastIndex = event.results.length - 1;
+        const transcript = event.results[lastIndex][0].transcript.trim();
+        if (!transcript) return;
+
+        setStatus('Thinking (Modal AI)...');
+        try {
+          const chatRes = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{ role: 'user', content: transcript }],
+              model: 'default'
+            })
+          });
+          const chatData = await chatRes.json();
+          const replyText = chatData.reply || "I am listening to your voice agent request.";
+
+          setStatus('Speaking...');
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(replyText);
+            utterance.onend = () => {
+              if (wsRef.current) setStatus('Live (Modal Voice Agent)');
+            };
+            window.speechSynthesis.speak(utterance);
+          }
+        } catch (err) {
+          console.error("Modal AI Voice Error:", err);
+          setStatus('Live (Modal Voice Agent)');
+        }
+      };
+
+      rec.onerror = (e) => {
+        console.warn("Speech recognition error:", e.error);
+        if (e.error === 'not-allowed') setStatus('Mic Permission Denied');
+      };
+
+      try {
+        rec.start();
+        // Store recognition object in wsRef so disconnectLive can clean it up
+        wsRef.current = {
+          close: () => {
+            try { rec.stop(); } catch (e) {}
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+          }
+        };
+      } catch (e) {
+        console.error("Failed to start speech recognition:", e);
+        setStatus('Microphone Error');
+        setIsLive(false);
+      }
       return;
     }
 
+    // Otherwise, use Google Gemini WebSocket if AIza key is present
     setStatus('Connecting Mic...');
     try {
       await initAudioPlayback();
@@ -134,7 +201,6 @@ export function useGeminiLive() {
       mediaStreamRef.current = stream;
 
       setStatus('Connecting WebSocket...');
-      // Note: Use 'gemini-live-2.5-flash-native-audio' as per the user's working python script
       const model = 'models/gemini-live-2.5-flash-native-audio';
       const cleanKey = String(apiKey).replace(/[\[\]"'\s]/g, '').trim();
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(cleanKey)}`;
@@ -145,7 +211,6 @@ export function useGeminiLive() {
         setIsLive(true);
         setStatus('Live (Speaking & Listening)');
         
-        // Send initial setup payload
         wsRef.current.send(JSON.stringify({
           setup: {
             model: model,
@@ -155,7 +220,6 @@ export function useGeminiLive() {
           }
         }));
 
-        // Start processing microphone input but WAIT to send until setupComplete
         const source = audioContextRef.current.createMediaStreamSource(stream);
         const processor = audioContextRef.current.createScriptProcessor(2048, 1, 1);
         audioProcessorRef.current = processor;
@@ -165,7 +229,7 @@ export function useGeminiLive() {
         
         processor.onaudioprocess = (e) => {
           if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-          if (!setupCompleteRef.current) return; // Very important: Wait for server
+          if (!setupCompleteRef.current) return;
           
           const inputData = e.inputBuffer.getChannelData(0);
           const pcm16 = floatTo16BitPCM(inputData);
@@ -185,12 +249,9 @@ export function useGeminiLive() {
       wsRef.current.onmessage = (event) => {
         try {
           const response = JSON.parse(event.data);
-          
           if (response.setupComplete) {
-            console.log("Setup complete received!");
             setupCompleteRef.current = true;
           }
-          
           if (response.serverContent && response.serverContent.modelTurn) {
             const parts = response.serverContent.modelTurn.parts;
             for (let part of parts) {
@@ -213,10 +274,7 @@ export function useGeminiLive() {
       wsRef.current.onclose = (event) => {
         console.log("WebSocket closed", event.code, event.reason);
         if (event.code !== 1000 && event.code !== 1005) {
-          // If it was a crash/error, keep the UI up so the user can see the status
           setStatus(`Closed: ${event.code} ${event.reason}`);
-          
-          // Cleanup tracks but don't force isLive to false so the error stays visible
           if (mediaStreamRef.current) {
             mediaStreamRef.current.getTracks().forEach(track => track.stop());
           }

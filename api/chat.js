@@ -47,7 +47,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: model,
         messages: messages
-      })
+      }),
+      signal: AbortSignal.timeout(4500)
     });
     
     if (!response.ok) {
@@ -88,67 +89,69 @@ export default async function handler(req, res) {
         const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-fastapi-app.modal.run/v1').replace(/\/$/, '');
         let modalSuccess = false;
 
-        // Priority 1: Custom Modal GPU Image Gen App
+        // Priority 1: Custom Modal GPU Image Gen App (with strict 2.5s timeout to prevent Vercel 504 Gateway Timeout)
         try {
           console.log("Using Custom GPU Modal Image Engine:", imageApiBaseUrl);
-          const tryUrls = [`${imageApiBaseUrl}/images/generations`, `${imageApiBaseUrl}/generate`, imageApiBaseUrl];
-          for (const targetUrl of tryUrls) {
-            try {
-              const modalRes = await fetch(targetUrl, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${modalApiKey}`
-                },
-                body: JSON.stringify({
-                  prompt: imagePrompt,
-                  n: 1,
-                  size: "1024x1024"
-                })
-              });
-              if (modalRes.ok) {
-                const modalData = await modalRes.json();
-                imageUrl = modalData?.data?.[0]?.url || modalData?.url || modalData?.image_url || modalData?.image || '';
-                if (imageUrl) {
-                  generatorName = "Custom Modal GPU Image Engine";
-                  modalSuccess = true;
-                  break;
-                }
-              }
-            } catch (e) {
-              // try next URL
+          const targetUrl = `${imageApiBaseUrl}/images/generations`;
+          const modalRes = await fetch(targetUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${modalApiKey}`
+            },
+            body: JSON.stringify({
+              prompt: imagePrompt,
+              n: 1,
+              size: "1024x1024"
+            }),
+            signal: AbortSignal.timeout(2500)
+          });
+          if (modalRes.ok) {
+            const modalData = await modalRes.json();
+            imageUrl = modalData?.data?.[0]?.url || modalData?.url || modalData?.image_url || modalData?.image || '';
+            if (imageUrl) {
+              generatorName = "Custom Modal GPU Image Engine";
+              modalSuccess = true;
             }
           }
         } catch (err) {
-          console.log("Modal image engine fallback...", err.message);
+          console.log("Modal image engine fallback (offline or timed out):", err.message);
         }
 
         // Priority 2: Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
         if (!modalSuccess && process.env.OPENAI_API_KEY) {
-          console.log("Using Premium Engine: DALL-E 3");
-          const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
-            },
-            body: JSON.stringify({
-              model: "dall-e-3",
-              prompt: imagePrompt,
-              n: 1,
-              size: "1024x1024",
-              quality: "hd"
-            })
-          });
-          const openAiData = await openAiRes.json();
-          if (openAiData.error) {
-            data.choices[0].message.content = `🚨 **DALL-E 3 Error:** ${openAiData.error.message}\n\n*(Note: Your OPENAI_API_KEY is present, but OpenAI rejected the request. Check if your OpenAI account has billing credits, or if the prompt violated OpenAI safety filters.)*\n\nOriginal prompt: ${imagePrompt}`;
-            return data;
+          try {
+            console.log("Using Premium Engine: DALL-E 3");
+            const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.OPENAI_API_KEY.trim()}`
+              },
+              body: JSON.stringify({
+                model: "dall-e-3",
+                prompt: imagePrompt,
+                n: 1,
+                size: "1024x1024",
+                quality: "hd"
+              }),
+              signal: AbortSignal.timeout(8000)
+            });
+            const openAiData = await openAiRes.json();
+            if (openAiData.error) {
+              data.choices[0].message.content = `🚨 **DALL-E 3 Error:** ${openAiData.error.message}\n\nOriginal prompt: ${imagePrompt}`;
+              return data;
+            }
+            imageUrl = openAiData.data[0].url;
+            generatorName = "DALL-E 3 (Premium)";
+            modalSuccess = true;
+          } catch (err) {
+            console.log("DALL-E 3 fallback:", err.message);
           }
-          imageUrl = openAiData.data[0].url;
-          generatorName = "DALL-E 3 (Premium)";
-        } else if (!modalSuccess) {
-          // Priority 3: Free Fallback Engine: Pollinations (FLUX)
+        } 
+        
+        if (!modalSuccess) {
+          // Priority 3: Free Fallback Engine: Pollinations (FLUX.1 Realism) - Generates instantly
           console.log("Using Free Engine: Pollinations FLUX.1");
           const encodedPrompt = encodeURIComponent(imagePrompt);
           const randomSeed = Math.floor(Math.random() * 1000000);
@@ -187,7 +190,8 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             prompt: musicPrompt,
             lyrics: musicPrompt
-          })
+          }),
+          signal: AbortSignal.timeout(3000)
         });
         if (musicRes.ok) {
           const musicData = await musicRes.json();
