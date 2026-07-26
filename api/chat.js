@@ -84,9 +84,47 @@ export default async function handler(req, res) {
         
         let imageUrl = "";
         let generatorName = "";
+        const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
+        const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-fastapi-app.modal.run/v1').replace(/\/$/, '');
+        let modalSuccess = false;
 
-        // Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
-        if (process.env.OPENAI_API_KEY) {
+        // Priority 1: Custom Modal GPU Image Gen App
+        try {
+          console.log("Using Custom GPU Modal Image Engine:", imageApiBaseUrl);
+          const tryUrls = [`${imageApiBaseUrl}/images/generations`, `${imageApiBaseUrl}/generate`, imageApiBaseUrl];
+          for (const targetUrl of tryUrls) {
+            try {
+              const modalRes = await fetch(targetUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${modalApiKey}`
+                },
+                body: JSON.stringify({
+                  prompt: imagePrompt,
+                  n: 1,
+                  size: "1024x1024"
+                })
+              });
+              if (modalRes.ok) {
+                const modalData = await modalRes.json();
+                imageUrl = modalData?.data?.[0]?.url || modalData?.url || modalData?.image_url || modalData?.image || '';
+                if (imageUrl) {
+                  generatorName = "Custom Modal GPU Image Engine";
+                  modalSuccess = true;
+                  break;
+                }
+              }
+            } catch (e) {
+              // try next URL
+            }
+          }
+        } catch (err) {
+          console.log("Modal image engine fallback...", err.message);
+        }
+
+        // Priority 2: Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
+        if (!modalSuccess && process.env.OPENAI_API_KEY) {
           console.log("Using Premium Engine: DALL-E 3");
           const openAiRes = await fetch("https://api.openai.com/v1/images/generations", {
             method: "POST",
@@ -109,8 +147,8 @@ export default async function handler(req, res) {
           }
           imageUrl = openAiData.data[0].url;
           generatorName = "DALL-E 3 (Premium)";
-        } else {
-          // Free Engine: Pollinations (FLUX)
+        } else if (!modalSuccess) {
+          // Priority 3: Free Fallback Engine: Pollinations (FLUX)
           console.log("Using Free Engine: Pollinations FLUX.1");
           const encodedPrompt = encodeURIComponent(imagePrompt);
           const randomSeed = Math.floor(Math.random() * 1000000);
@@ -131,6 +169,68 @@ export default async function handler(req, res) {
   const requiresVision = messages.some(m => Array.isArray(m.content));
 
   try {
+    // Check for Music / Song Generation Request via Modal
+    const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
+    const isMusicRequest = /(?:WRITE_A_SONG:|MUSIC_PROMPT:|\[MUSIC_PROMPT:|\b(write|create|generate|make|compose|sing|record)\b.*\b(song|music|track|beat|melody|tune)\b)/i.test(lastUserMsg);
+    if (isMusicRequest) {
+      const musicPrompt = lastUserMsg.replace(/^(write a song about|create a song about|generate a song about|create song|create music)/i, '').trim() || lastUserMsg;
+      const musicApiUrl = process.env.MUSIC_API_URL || 'https://mannskahlon84--music-svc-generator-fastapi-app.modal.run/generate-custom-song';
+      const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
+      console.log("Music Intercept Triggered. Using Custom Modal Music Service:", musicApiUrl, "Prompt:", musicPrompt);
+      try {
+        const musicRes = await fetch(musicApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${modalApiKey}`
+          },
+          body: JSON.stringify({
+            prompt: musicPrompt,
+            lyrics: musicPrompt
+          })
+        });
+        if (musicRes.ok) {
+          const musicData = await musicRes.json();
+          const audioUrl = musicData?.audio_url || musicData?.url || musicData?.song_url || musicData?.music_url || (musicData?.data && musicData.data[0]?.url) || '';
+          const lyrics = musicData?.lyrics || musicData?.text || '';
+          let replyContent = `🎵 **Custom AI Song Generated via Modal Engine**\n*Prompt: "${musicPrompt}"*\n\n`;
+          if (audioUrl) {
+            replyContent += `<audio controls src="${audioUrl}" class="w-full mt-2 rounded-xl"></audio>\n\n[**⬇️ Download Audio/MP3**](${audioUrl})\n\n`;
+          }
+          if (lyrics) {
+            replyContent += `### Lyrics:\n${lyrics}`;
+          }
+          if (!audioUrl && !lyrics) {
+            replyContent += `*(Song request sent to Modal: ${JSON.stringify(musicData)})*`;
+          }
+          return res.status(200).json({
+            choices: [{
+              message: { role: 'assistant', content: replyContent }
+            }]
+          });
+        }
+      } catch (err) {
+        console.log("Music Modal service fallback:", err.message);
+      }
+    }
+
+    // Priority 0: Custom GPU Modal Chat & Voice LLM
+    try {
+      const chatApiBaseUrl = (process.env.CHAT_API_BASE_URL || 'https://mannskahlon84--chat-llm-voice-agent-fastapi-app.modal.run/v1').replace(/\/$/, '');
+      const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
+      console.log('Attempting Custom Modal Chat & Voice LLM:', chatApiBaseUrl);
+      const data = await callProvider(
+        `${chatApiBaseUrl}/chat/completions`,
+        modalApiKey,
+        'gpt-4o-mini'
+      );
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+    } catch (e) {
+      errors.push(`Custom Modal LLM Error: ${e.message}`);
+      console.log('Custom Modal LLM fallback:', e.message);
+    }
+
     let groqFailed = false;
     if (!requiresVision) {
       try {

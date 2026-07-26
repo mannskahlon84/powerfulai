@@ -32,11 +32,12 @@ export default async function handler(req, res) {
     apiKey = apiKey.replace(/[\[\]"']/g, '').trim();
   }
 
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Neither VALID_API_KEYS nor GEMINI_API_KEY is set on the server.' });
-  }
+  const modalApiKey = process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026';
+  const chatApiBaseUrl = process.env.CHAT_API_BASE_URL || 'https://mannskahlon84--chat-llm-voice-agent-fastapi-app.modal.run/v1';
 
   return res.status(200).json({
-    key: apiKey
+    key: apiKey || modalApiKey,
+    modalKey: modalApiKey,
+    chatBaseUrl: chatApiBaseUrl
   });
 }
