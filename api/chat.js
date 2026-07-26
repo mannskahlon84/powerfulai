@@ -144,7 +144,7 @@ export default async function handler(req, res) {
 
     if (groqFailed || requiresVision) {
       try {
-        const geminiKey = (process.env.VALID_API_KEYS || process.env.GEMINI_API_KEY || '').split(',')[0].replace(/[\[\]"']/g, '').trim();
+        const geminiKey = (process.env.VALID_API_KEYS || process.env.VALID_API_KEY || process.env.LIVE_API_KEY || process.env.GEMINI_API_KEY || '').split(',')[0].replace(/[\[\]"']/g, '').trim();
         if (!geminiKey) throw new Error("Missing GEMINI_API_KEY or VALID_API_KEYS");
         console.log('Attempting Gemini...');
         const data = await callProvider(

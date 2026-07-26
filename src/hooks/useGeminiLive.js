@@ -136,7 +136,8 @@ export function useGeminiLive() {
       setStatus('Connecting WebSocket...');
       // Note: Use 'gemini-live-2.5-flash-native-audio' as per the user's working python script
       const model = 'models/gemini-live-2.5-flash-native-audio';
-      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+      const cleanKey = String(apiKey).replace(/[\[\]"'\s]/g, '').trim();
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(cleanKey)}`;
       
       wsRef.current = new WebSocket(wsUrl);
       

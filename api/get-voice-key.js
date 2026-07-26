@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     console.warn("Suspicious request to /api/get-voice-key from origin:", origin);
   }
 
-  let rawKey = process.env.VALID_API_KEYS || process.env.GEMINI_API_KEY || '';
+  let rawKey = process.env.VALID_API_KEYS || process.env.VALID_API_KEY || process.env.LIVE_API_KEY || process.env.GEMINI_API_KEY || '';
   let apiKey = '';
   try {
     if (rawKey.trim().startsWith('[')) {

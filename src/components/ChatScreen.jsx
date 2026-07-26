@@ -232,15 +232,39 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         <div className="max-w-2xl mx-auto w-full space-y-8 pt-8 pb-4">
           {isLive ? (
             <div className="flex h-[80vh] items-center justify-center flex-col text-textMuted space-y-6 animate-fade-in">
-              <div className="relative">
-                <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse"></div>
-                <div className="w-32 h-32 bg-panel border-4 border-blue-500/50 rounded-full flex items-center justify-center relative z-10 shadow-2xl">
-                  <Activity size={48} className="text-blue-400 animate-pulse" />
+              <div className="relative flex flex-col items-center">
+                {/* Glowing Outer Wave Ring */}
+                <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/25 via-indigo-500/25 to-purple-500/25 blur-2xl rounded-full animate-pulse"></div>
+                
+                {/* Equalizer Wave Circle */}
+                <div className="w-40 h-40 bg-white dark:bg-slate-900 border-4 border-blue-500/60 dark:border-blue-400/60 rounded-full flex flex-col items-center justify-center relative z-10 shadow-2xl overflow-hidden group">
+                  {/* Real-time Bouncing Audio Equalizer Waves |||||||| */}
+                  <div className="flex items-center justify-center gap-1.5 h-16 px-4">
+                    {[35, 65, 100, 75, 95, 55, 85, 45].map((height, idx) => (
+                      <div
+                        key={idx}
+                        className="w-1.5 bg-gradient-to-t from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-cyan-300 rounded-full animate-pulse"
+                        style={{
+                          height: `${height}%`,
+                          animationDuration: `${0.4 + (idx % 4) * 0.15}s`,
+                          animationDirection: 'alternate',
+                          animationIterationCount: 'infinite'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-blue-600 dark:text-blue-400 mt-2">
+                    Live Audio
+                  </span>
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-white tracking-wide">Live Voice Agent</h2>
-              <p className="text-blue-400 font-medium px-4 py-1.5 bg-blue-500/10 rounded-full border border-blue-500/20 shadow-sm">{liveStatus}</p>
-              <p className="text-sm text-textMuted max-w-sm text-center">
+              <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight drop-shadow-sm">
+                Live Voice Agent
+              </h2>
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-300 px-5 py-2 bg-blue-500/10 dark:bg-blue-500/20 rounded-full border border-blue-500/30 shadow-sm">
+                {liveStatus}
+              </p>
+              <p className="text-sm text-slate-600 dark:text-textMuted max-w-sm text-center font-medium">
                 You are now in a real-time voice call. Speak naturally to your personal AI agent, and you can interrupt it at any time!
               </p>
             </div>
