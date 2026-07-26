@@ -48,9 +48,9 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       ];
     }
 
-    // Check for AI Avatar Face Clone likeness (@manpreet or custom handle)
-    let avatarHandleTag = '@manpreet';
-    let avatarLikeness = 'A handsome young Indian man in his late 20s with a neat modern hairstyle, sharp jawline, well-groomed dark beard, charismatic smile, cinematic 8k realism';
+    // Check for AI Avatar Face Clone likeness (@abc or custom handle)
+    let avatarHandleTag = '@abc';
+    let avatarLikeness = 'A professional studio portrait of a confident person with a modern hairstyle, charismatic smile, cinematic 8k realism';
     try {
       const savedAvatar = localStorage.getItem('customUserAvatar');
       if (savedAvatar) {
@@ -60,11 +60,18 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       }
     } catch(e) {}
 
-    if (typeof userContent === 'string' && userContent.toLowerCase().includes(avatarHandleTag.toLowerCase())) {
-      const enhancedPrompt = userContent.replace(
-        new RegExp(avatarHandleTag, 'gi'),
-        `[CHARACTER LIKENESS: ${avatarLikeness}]`
-      );
+    const hasAvatarTag = typeof userContent === 'string' && (
+      userContent.toLowerCase().includes(avatarHandleTag.toLowerCase()) ||
+      /@\w+/i.test(userContent)
+    );
+    const isImageRequest = typeof userContent === 'string' && (
+      hasAvatarTag ||
+      /\b(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(userContent) ||
+      /\b(image|picture|photo|pic|avatar|clone)\b.*\b(create|generate|make|draw|show|render|cretae|generat)\b/i.test(userContent)
+    );
+
+    if (isImageRequest) {
+      const enhancedPrompt = typeof userContent === 'string' ? userContent.replace(/@\w+/gi, `[CHARACTER LIKENESS: ${avatarLikeness}]`) : '';
       userContent = `[IMAGE_PROMPT: ${enhancedPrompt}]`;
     }
 
@@ -198,7 +205,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     { icon: File, label: 'Upload files', color: 'text-purple-400', action: () => handleMenuAction('files') },
     { icon: Image, label: 'Upload photos', color: 'text-green-400', action: () => handleMenuAction('photos') },
     { icon: Sparkles, label: 'Create image', color: 'text-yellow-400', action: () => handleMenuAction('Generate an image of ') },
-    { icon: User, label: 'Create clone (@manpreet)', color: 'text-cyan-400', action: () => handleMenuAction('Generate an ultra realistic cinematic photo of @manpreet ') },
+    { icon: User, label: 'Create clone (@abc)', color: 'text-cyan-400', action: () => handleMenuAction('Generate an ultra realistic cinematic photo of @abc ') },
     { icon: Video, label: 'Create video', color: 'text-pink-400', action: () => handleMenuAction('Generate a video script for ') },
     { icon: Music, label: 'Create song', color: 'text-orange-400', action: () => handleMenuAction('Write a song about ') },
   ];

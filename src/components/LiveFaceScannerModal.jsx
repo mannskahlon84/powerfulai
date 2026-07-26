@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Check, Sparkles, RefreshCw, User, Smartphone, Laptop, Zap } from 'lucide-react';
 
-export default function LiveFaceScannerModal({ isOpen, onClose, onCapture, avatarHandle = '@manpreet' }) {
+export default function LiveFaceScannerModal({ isOpen, onClose, onCapture, avatarHandle = '@abc' }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [error, setError] = useState('');

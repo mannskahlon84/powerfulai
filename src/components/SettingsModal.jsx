@@ -40,19 +40,29 @@ export default function SettingsModal({ isOpen, onClose }) {
     setKeySaved(false);
   };
 
+  const isOwnerAdmin = () => {
+    try {
+      const uStr = localStorage.getItem('mockUser') || localStorage.getItem('currentUser') || '{}';
+      const u = JSON.parse(uStr);
+      return u?.email === 'admin@powerfulai.com' || u?.role === 'admin' || localStorage.getItem('ownerAccess') === 'true';
+    } catch(e) {
+      return false;
+    }
+  };
+
   const [avatarHandle, setAvatarHandle] = useState(() => {
     const saved = localStorage.getItem('customUserAvatar');
     if (saved) {
-      try { return JSON.parse(saved).handle || '@manpreet'; } catch (e) { return '@manpreet'; }
+      try { return JSON.parse(saved).handle || '@abc'; } catch (e) { return '@abc'; }
     }
-    return '@manpreet';
+    return '@abc';
   });
   const [avatarDesc, setAvatarDesc] = useState(() => {
     const saved = localStorage.getItem('customUserAvatar');
     if (saved) {
       try { return JSON.parse(saved).description || ''; } catch (e) { return ''; }
     }
-    return 'A handsome young Indian man in his late 20s with a modern neat hairstyle, sharp jawline, well-groomed dark beard, charismatic smile, cinematic 8k realism';
+    return 'A professional studio portrait of a confident person with a modern hairstyle, charismatic smile, cinematic 8k realism';
   });
   const [avatarPhoto, setAvatarPhoto] = useState(() => {
     const saved = localStorage.getItem('customUserAvatar');
@@ -225,65 +235,67 @@ export default function SettingsModal({ isOpen, onClose }) {
                 </p>
               </div>
 
-              <div className="bg-slate-50 dark:bg-background rounded-2xl p-5 border border-slate-200 dark:border-border/50">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-textMuted flex items-center gap-2">
-                    <Key size={14} className="text-primary" />
-                    Custom Gemini Voice API Key (Override)
-                  </label>
-                  {customVoiceKey && (
-                    <span className="text-[11px] px-2 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full font-semibold">
-                      Custom Key Active
-                    </span>
-                  )}
-                </div>
-                
-                <div className="relative">
-                  <input
-                    type={showApiKey ? "text" : "password"}
-                    value={customVoiceKey}
-                    onChange={(e) => setCustomVoiceKey(e.target.value)}
-                    placeholder="AIzaSy... (Paste your Gemini API Key here)"
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-border/80 rounded-xl pl-4 pr-10 py-3 text-sm text-slate-900 dark:text-white font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
-                  >
-                    {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between mt-3">
-                  <p className="text-xs text-slate-500 dark:text-textMuted leading-relaxed">
-                    Override the default server key. Saved securely in your browser's local storage.
-                  </p>
-                  <div className="flex items-center gap-2">
+              {isOwnerAdmin() && (
+                <div className="bg-slate-50 dark:bg-background rounded-2xl p-5 border border-slate-200 dark:border-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-textMuted flex items-center gap-2">
+                      <Key size={14} className="text-primary" />
+                      Custom Gemini Voice API Key (Override - Admin Only)
+                    </label>
                     {customVoiceKey && (
-                      <button
-                        onClick={handleClearVoiceKey}
-                        className="px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                      >
-                        Clear
-                      </button>
+                      <span className="text-[11px] px-2 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 rounded-full font-semibold">
+                        Custom Key Active
+                      </span>
                     )}
+                  </div>
+                  
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={customVoiceKey}
+                      onChange={(e) => setCustomVoiceKey(e.target.value)}
+                      placeholder="AIzaSy... (Paste your Gemini API Key here)"
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-border/80 rounded-xl pl-4 pr-10 py-3 text-sm text-slate-900 dark:text-white font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm"
+                    />
                     <button
-                      onClick={handleSaveVoiceKey}
-                      className="px-4 py-1.5 bg-primary hover:bg-indigo-600 text-white text-xs font-medium rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
                     >
-                      {keySaved ? (
-                        <>
-                          <Check size={14} />
-                          Saved!
-                        </>
-                      ) : (
-                        'Save Key'
-                      )}
+                      {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
+
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-xs text-slate-500 dark:text-textMuted leading-relaxed">
+                      Override the default server key. Saved securely in your browser's local storage.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {customVoiceKey && (
+                        <button
+                          onClick={handleClearVoiceKey}
+                          className="px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <button
+                        onClick={handleSaveVoiceKey}
+                        className="px-4 py-1.5 bg-primary hover:bg-indigo-600 text-white text-xs font-medium rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                      >
+                        {keySaved ? (
+                          <>
+                            <Check size={14} />
+                            Saved!
+                          </>
+                        ) : (
+                          'Save Key'
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -574,7 +586,7 @@ export default function SettingsModal({ isOpen, onClose }) {
                   <Crown size={32} className="text-primary" />
                 </div>
                 <p className="text-xs text-slate-700 dark:text-textMuted leading-relaxed">
-                  You are running Powerful AI with unlimited text messages, image generation, and multi-model failover (Groq + Gemini + OpenRouter).
+                  You are running Powerful AI with unlimited text messages, real-time voice intelligence, and HD image & video generation.
                 </p>
               </div>
             </div>

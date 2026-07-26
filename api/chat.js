@@ -57,17 +57,29 @@ export default async function handler(req, res) {
     return response.json();
   };
 
-  const handleOpenAIImageGeneration = async (data) => {
+  const handleOpenAIImageGeneration = async (data, messages) => {
     let messageStr = "";
     try {
       if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) return data;
       
       messageStr = data.choices[0].message.content;
-      // Ultra-forgiving regex to catch the prompt even if the AI messes up the exact formatting
-      const match = messageStr.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
+      const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
+
+      // Check if AI output OR user input requested image generation or @avatar tag
+      const aiMatch = messageStr.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
+      const userMatch = lastUserMsg.match(/(?:IMAGE_PROMPT:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
+      const isDirectImageCmd = /^(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(lastUserMsg) || /@\w+/i.test(lastUserMsg);
+
+      let imagePrompt = "";
+      if (aiMatch && aiMatch[1]) {
+        imagePrompt = aiMatch[1].trim();
+      } else if (userMatch && userMatch[1]) {
+        imagePrompt = userMatch[1].trim();
+      } else if (isDirectImageCmd) {
+        imagePrompt = lastUserMsg.trim();
+      }
       
-      if (match && match[1]) {
-        const imagePrompt = match[1].trim();
+      if (imagePrompt) {
         console.log("Image Intercept Triggered. Prompt:", imagePrompt);
         
         let imageUrl = "";
@@ -130,7 +142,7 @@ export default async function handler(req, res) {
           'llama-3.1-8b-instant'
         );
         if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-        return res.status(200).json(await handleOpenAIImageGeneration(data));
+        return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
       } catch (e) {
         errors.push(`Groq Error: ${e.message}`);
         console.log('Groq failed:', e.message);
@@ -153,7 +165,7 @@ export default async function handler(req, res) {
           'gemini-1.5-flash'
         );
         if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-        return res.status(200).json(await handleOpenAIImageGeneration(data));
+        return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
       } catch (e) {
         errors.push(`Gemini Error: ${e.message}`);
         console.log('Gemini failed:', e.message);
@@ -169,7 +181,7 @@ export default async function handler(req, res) {
         'openai/gpt-4o-mini'
       );
       if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-      return res.status(200).json(await handleOpenAIImageGeneration(data));
+      return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
     } catch (e) {
       errors.push(`OpenRouter Error: ${e.message}`);
       console.log('OpenRouter failed:', e.message);
