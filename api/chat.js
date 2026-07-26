@@ -88,34 +88,47 @@ export default async function handler(req, res) {
         const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
         const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-fastapi-app.modal.run/v1').replace(/\/$/, '');
         let modalSuccess = false;
+        let lastModalError = "Unknown error";
 
-        // Priority 1: Custom Modal GPU Image Gen App (with strict 2.5s timeout to prevent Vercel 504 Gateway Timeout)
-        try {
-          console.log("Using Custom GPU Modal Image Engine:", imageApiBaseUrl);
-          const targetUrl = `${imageApiBaseUrl}/images/generations`;
-          const modalRes = await fetch(targetUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${modalApiKey}`
-            },
-            body: JSON.stringify({
-              prompt: imagePrompt,
-              n: 1,
-              size: "1024x1024"
-            }),
-            signal: AbortSignal.timeout(25000)
-          });
-          if (modalRes.ok) {
-            const modalData = await modalRes.json();
-            imageUrl = modalData?.data?.[0]?.url || modalData?.url || modalData?.image_url || modalData?.image || '';
-            if (imageUrl) {
-              generatorName = "Custom Modal GPU Image Engine";
-              modalSuccess = true;
+        // Priority 1: Custom Modal GPU Image Gen App (automatic retry loop across endpoints with 20s timeout each)
+        const tryEndpoints = [
+          `${imageApiBaseUrl}/images/generations`,
+          `${imageApiBaseUrl}/generate`,
+          imageApiBaseUrl
+        ];
+
+        console.log("Using Custom GPU Modal Image Engine:", imageApiBaseUrl);
+        for (const targetUrl of tryEndpoints) {
+          try {
+            console.log("Attempting Modal image endpoint:", targetUrl);
+            const modalRes = await fetch(targetUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${modalApiKey}`
+              },
+              body: JSON.stringify({
+                prompt: imagePrompt,
+                n: 1,
+                size: "1024x1024"
+              }),
+              signal: AbortSignal.timeout(20000)
+            });
+            if (modalRes.ok) {
+              const modalData = await modalRes.json();
+              imageUrl = modalData?.data?.[0]?.url || modalData?.url || modalData?.image_url || modalData?.image || '';
+              if (imageUrl) {
+                generatorName = "Custom Modal GPU Image Engine";
+                modalSuccess = true;
+                break;
+              }
+            } else {
+              lastModalError = `HTTP ${modalRes.status} (${modalRes.statusText})`;
             }
+          } catch (err) {
+            lastModalError = err.message;
+            console.log(`Modal endpoint ${targetUrl} failed:`, err.message);
           }
-        } catch (err) {
-          console.log("Modal image engine fallback (offline or timed out):", err.message);
         }
 
         // Priority 2: Premium Engine: ChatGPT's DALL-E 3 (Requires OPENAI_API_KEY)
@@ -135,32 +148,28 @@ export default async function handler(req, res) {
                 size: "1024x1024",
                 quality: "hd"
               }),
-              signal: AbortSignal.timeout(8000)
+              signal: AbortSignal.timeout(25000)
             });
             const openAiData = await openAiRes.json();
             if (openAiData.error) {
-              data.choices[0].message.content = `🚨 **DALL-E 3 Error:** ${openAiData.error.message}\n\nOriginal prompt: ${imagePrompt}`;
-              return data;
+              lastModalError = `DALL-E 3 Error: ${openAiData.error.message}`;
+            } else {
+              imageUrl = openAiData.data[0].url;
+              generatorName = "DALL-E 3 (Premium)";
+              modalSuccess = true;
             }
-            imageUrl = openAiData.data[0].url;
-            generatorName = "DALL-E 3 (Premium)";
-            modalSuccess = true;
           } catch (err) {
+            lastModalError = `DALL-E 3 Error: ${err.message}`;
             console.log("DALL-E 3 fallback:", err.message);
           }
         } 
         
+        // NEVER fall back to Pollinations! If Modal & OpenAI fail, return a clear, actionable error message.
         if (!modalSuccess) {
-          // Priority 3: Free Fallback Engine: Pollinations (FLUX.1 Realism) - Generates instantly
-          console.log("Using Free Engine: Pollinations FLUX.1");
-          const encodedPrompt = encodeURIComponent(imagePrompt);
-          const randomSeed = Math.floor(Math.random() * 1000000);
-          imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?seed=${randomSeed}&nologo=true&model=flux-realism`;
-          generatorName = "FLUX.1 Realism";
+          data.choices[0].message.content = `🚨 **Modal GPU Image Engine Currently Unreachable**\n\nWe attempted to generate your photoshoot image using your custom Modal GPU service (\`${imageApiBaseUrl}\`), but the server could not be reached or returned an error (\`${lastModalError}\`).\n\n**Why did this happen?**\n- Your Modal Serverless GPU container (\`image-gen-fastapi-app\`) may be stopped or scaling up from zero.\n- The endpoint URL path might be different than expected.\n\n**How to fix:**\n1. Check your Modal dashboard to ensure your \`image-gen-fastapi-app\` container is deployed and online.\n2. Once your container is warm, try submitting your prompt again!\n\n*(Original prompt: ${imagePrompt})*`;
+        } else {
+          data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
         }
-        
-        data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
-      }
     } catch (e) {
       console.error("Image intercept error:", e);
       data.choices[0].message.content = `🚨 **Internal Image Intercept Error:** ${e.message}\n\nOriginal prompt: ${messageStr}`;
