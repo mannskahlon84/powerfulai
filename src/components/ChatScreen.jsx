@@ -67,7 +67,9 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     const isImageRequest = typeof userContent === 'string' && (
       hasAvatarTag ||
       /\b(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(userContent) ||
-      /\b(image|picture|photo|pic|avatar|clone)\b.*\b(create|generate|make|draw|show|render|cretae|generat)\b/i.test(userContent)
+      /\b(image|picture|photo|pic|avatar|clone)\b.*\b(create|generate|make|draw|show|render|cretae|generat)\b/i.test(userContent) ||
+      (/^(a|an|the|beautiful|cute|handsome|stunning|cinematic|realistic|hyper-realistic|portrait|photo|photograph|shot|view|scene)\b/i.test(userContent.trim()) && !userContent.includes('?')) ||
+      (/\b(girl|boy|woman|man|baby|beach|walking|standing|sitting|wearing|dressed|portrait|photo|pic|image|shot|cinematic|lighting|view|sunset|sunrise|scene|tajmahal|taj mahal|mountain|river|forest|car|bike|dog|cat|animal|studio|lens|camera|render|wallpaper|illustration|sketch|painting)\b/i.test(userContent) && !/\b(how|what|why|when|where|who|is|are|can|could|would|should|function|const|let|var|class|import|error|bug|code|url|api|website)\b/i.test(userContent) && !userContent.includes('?'))
     );
 
     if (isImageRequest) {

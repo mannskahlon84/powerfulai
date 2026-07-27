@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         model: model,
         messages: messages
       }),
-      signal: AbortSignal.timeout(4500)
+      signal: AbortSignal.timeout(2500)
     });
     
     if (!response.ok) {
@@ -274,7 +274,10 @@ export default async function handler(req, res) {
     // bypass text LLMs entirely and execute handleOpenAIImageGeneration directly on FLUX.1!
     const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
     const userImgMatch = lastUserMsg.match(/(?:IMAGE_PROMPT:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
-    const isDirectImageCmd = /^(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(lastUserMsg) || /@\w+/i.test(lastUserMsg);
+    const isDirectImageCmd = /^(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(lastUserMsg) ||
+      /@\w+/i.test(lastUserMsg) ||
+      (/^(a|an|the|beautiful|cute|handsome|stunning|cinematic|realistic|hyper-realistic|portrait|photo|photograph|shot|view|scene)\b/i.test(lastUserMsg.trim()) && !lastUserMsg.includes('?')) ||
+      (/\b(girl|boy|woman|man|baby|beach|walking|standing|sitting|wearing|dressed|portrait|photo|pic|image|shot|cinematic|lighting|view|sunset|sunrise|scene|tajmahal|taj mahal|mountain|river|forest|car|bike|dog|cat|animal|studio|lens|camera|render|wallpaper|illustration|sketch|painting)\b/i.test(lastUserMsg) && !/\b(how|what|why|when|where|who|is|are|can|could|would|should|function|const|let|var|class|import|error|bug|code|url|api|website)\b/i.test(lastUserMsg) && !lastUserMsg.includes('?'));
 
     if (userImgMatch || isDirectImageCmd) {
       console.log("Direct Image Prompt Detected. Bypassing text LLM and invoking FLUX.1 Image Engine directly...");
