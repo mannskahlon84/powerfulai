@@ -269,6 +269,29 @@ export default async function handler(req, res) {
       }
     }
 
+    // DIRECT IMAGE GENERATION INTERCEPTION:
+    // If the user's message is an image prompt (e.g., [IMAGE_PROMPT:...], /image, or "generate image..."),
+    // bypass text LLMs entirely and execute handleOpenAIImageGeneration directly on FLUX.1!
+    const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
+    const userImgMatch = lastUserMsg.match(/(?:IMAGE_PROMPT:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
+    const isDirectImageCmd = /^(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(lastUserMsg) || /@\w+/i.test(lastUserMsg);
+
+    if (userImgMatch || isDirectImageCmd) {
+      console.log("Direct Image Prompt Detected. Bypassing text LLM and invoking FLUX.1 Image Engine directly...");
+      const dummyData = {
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: `[IMAGE_PROMPT: ${userImgMatch ? userImgMatch[1].trim() : lastUserMsg.trim()}]`
+            }
+          }
+        ]
+      };
+      const imgResult = await handleOpenAIImageGeneration(dummyData, messages);
+      return res.status(200).json(imgResult);
+    }
+
     // Priority 0: Custom GPU Modal Chat & Voice LLM
     try {
       const chatApiBaseUrl = (process.env.CHAT_API_BASE_URL || 'https://mannskahlon84--chat-llm-voice-agent-fastapi-app.modal.run/v1').replace(/\/$/, '');
@@ -340,6 +363,32 @@ export default async function handler(req, res) {
     } catch (e) {
       errors.push(`OpenRouter Error: ${e.message}`);
       console.log('OpenRouter failed:', e.message);
+    }
+
+    // Priority 4: 100% Free Open Text Completion Fallback (No API key required)
+    try {
+      console.log('Attempting Open Text Completion Fallback...');
+      const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: messages,
+          model: 'openai'
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const textContent = await response.text();
+      return res.status(200).json(await handleOpenAIImageGeneration({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: textContent || "Hello! I am ready to assist you."
+          }
+        }]
+      }, messages));
+    } catch (fallbackErr) {
+      errors.push(`Open Text Fallback Error: ${fallbackErr.message}`);
+      console.log('Open Text Fallback failed:', fallbackErr.message);
       throw new Error('All AI providers failed');
     }
 
