@@ -222,26 +222,37 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       } catch (backendErr) {
         console.warn("Backend chat unavailable. Using instant client-side AI engine:", backendErr.message);
         try {
-          const lastUserText = typeof userContent === 'string' ? userContent : 'Hello';
-          const fallbackRes = await fetch(`https://text.pollinations.ai/prompt/${encodeURIComponent(lastUserText)}?model=openai`);
+          const fallbackRes = await fetch("https://api.blackbox.ai/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: messagesToSend,
+              model: "blackboxai",
+              max_tokens: 1024
+            })
+          });
           const fallbackText = await fallbackRes.text();
-          data = {
-            choices: [
-              {
-                message: {
-                  role: 'assistant',
-                  content: fallbackText || "I'm right here and ready to help! What would you like to explore today?"
+          if (fallbackText && !fallbackText.includes('"error"') && !fallbackText.includes('Payment Required') && !fallbackText.includes('pollinations')) {
+            data = {
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: fallbackText.trim()
+                  }
                 }
-              }
-            ]
-          };
+              ]
+            };
+          } else {
+            throw new Error("Invalid fallback response");
+          }
         } catch (clientErr) {
           data = {
             choices: [
               {
                 message: {
                   role: 'assistant',
-                  content: "I am ready and online! How can I assist you today?"
+                  content: "Hello! I am Powerful AI, your world-class intelligent assistant. How can I help you today?"
                 }
               }
             ]

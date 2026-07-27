@@ -402,29 +402,40 @@ export default async function handler(req, res) {
       console.log('OpenRouter failed:', e.message);
     }
 
-    // Priority 4: 100% Free Open Text Completion Fallback (No API key required)
+    // Priority 4: 100% Free Open AI Chat Fallback (No API key required, unlimited)
     try {
-      console.log('Attempting Open Text Completion Fallback...');
-      const lastUserMsgText = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : 'Hello') : 'Hello';
-      const response = await fetch(`https://text.pollinations.ai/prompt/${encodeURIComponent(lastUserMsgText)}?model=openai`);
+      console.log('Attempting Free Open Chat Fallback...');
+      const response = await fetch('https://api.blackbox.ai/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: messages,
+          model: 'blackboxai',
+          max_tokens: 1024
+        })
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const textContent = await response.text();
-      return res.status(200).json(await handleOpenAIImageGeneration({
-        choices: [{
-          message: {
-            role: "assistant",
-            content: textContent || "I am here and ready to help! What would you like to explore today?"
-          }
-        }]
-      }, messages));
+      // Ensure response is valid markdown text and not an error JSON
+      if (textContent && !textContent.includes('"error"') && !textContent.includes('Payment Required') && !textContent.includes('pollinations')) {
+        return res.status(200).json(await handleOpenAIImageGeneration({
+          choices: [{
+            message: {
+              role: "assistant",
+              content: textContent.trim()
+            }
+          }]
+        }, messages));
+      }
+      throw new Error("Invalid fallback text");
     } catch (fallbackErr) {
-      errors.push(`Open Text Fallback Error: ${fallbackErr.message}`);
-      console.log('Open Text Fallback failed:', fallbackErr.message);
+      errors.push(`Free Open Fallback Error: ${fallbackErr.message}`);
+      console.log('Free Open Fallback failed:', fallbackErr.message);
       return res.status(200).json({
         choices: [{
           message: {
             role: "assistant",
-            content: "I am currently online! How can I assist you today?"
+            content: "Hello! I am Powerful AI, your world-class intelligent assistant. How can I help you today?"
           }
         }]
       });
@@ -435,7 +446,7 @@ export default async function handler(req, res) {
       choices: [{
         message: {
           role: "assistant",
-          content: "I am ready to help! What would you like to work on?"
+          content: "Hello! I am ready to assist you. What would you like to explore today?"
         }
       }]
     });
