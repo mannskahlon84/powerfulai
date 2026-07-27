@@ -65,6 +65,10 @@ export default async function handler(req, res) {
       
       messageStr = data.choices[0].message.content;
       const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
+      const lastAssistantImgMsg = messages && messages.slice().reverse().find(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('!['));
+      const isImageFollowUp = !!lastAssistantImgMsg && (
+        /\b(make|change|add|remove|turn|show|put|replace|more|less|like|real|human|humans|background|desert|dessert|road|bike|car|face|color|light|lighting|style|day|night|sunset|look|without|with)\b/i.test(lastUserMsg)
+      ) && !/\b(how|what|why|when|where|who|url|website|code|error|api)\b/i.test(lastUserMsg);
 
       // Check if AI output OR user input requested image generation or @avatar tag
       const aiMatch = messageStr.match(/(?:IMAGE_PROMPT:|\[GENERATE_IMAGE:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
@@ -78,6 +82,10 @@ export default async function handler(req, res) {
         imagePrompt = userMatch[1].trim();
       } else if (isDirectImageCmd) {
         imagePrompt = lastUserMsg.trim();
+      } else if (isImageFollowUp) {
+        const lastUserPromptMsg = messages.slice().reverse().find(m => m.role === 'user' && m !== messages[messages.length - 1]);
+        const prevPrompt = lastUserPromptMsg && typeof lastUserPromptMsg.content === 'string' ? lastUserPromptMsg.content : '';
+        imagePrompt = `${prevPrompt}, modified instruction: ${lastUserMsg.trim()}, hyper-realistic photography`;
       }
       
       if (imagePrompt) {
@@ -110,17 +118,10 @@ export default async function handler(req, res) {
               prompt: imagePrompt,
               model_type: "dev",
               aspect_ratio: "16:9",
-              loras: [
-                {
-                  "name": "cyberpunk_human",
-                  "scale": 0.85
-                }
-              ],
               guidance_scale: 3.5,
               num_inference_steps: 28,
               output_format: "webp",
-              n: 1,
-              size: "1024x1024"
+              n: 1
             } : {
               prompt: imagePrompt,
               n: 1,

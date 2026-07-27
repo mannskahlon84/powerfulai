@@ -64,6 +64,11 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       userContent.toLowerCase().includes(avatarHandleTag.toLowerCase()) ||
       /@\w+/i.test(userContent)
     );
+    const lastAssistantImgMsg = messages.slice().reverse().find(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('!['));
+    const isImageFollowUp = !!lastAssistantImgMsg && typeof userContent === 'string' && (
+      /\b(make|change|add|remove|turn|show|put|replace|more|less|like|real|human|humans|background|desert|dessert|road|bike|car|face|color|light|lighting|style|day|night|sunset|look|without|with)\b/i.test(userContent)
+    ) && !/\b(how|what|why|when|where|who|url|website|code|error|api)\b/i.test(userContent);
+
     const isImageRequest = typeof userContent === 'string' && (
       hasAvatarTag ||
       /\b(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(userContent) ||
@@ -72,7 +77,12 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       (/\b(girl|boy|woman|man|baby|beach|walking|standing|sitting|wearing|dressed|portrait|photo|pic|image|shot|cinematic|lighting|view|sunset|sunrise|scene|tajmahal|taj mahal|mountain|river|forest|car|bike|dog|cat|animal|studio|lens|camera|render|wallpaper|illustration|sketch|painting)\b/i.test(userContent) && !/\b(how|what|why|when|where|who|is|are|can|could|would|should|function|const|let|var|class|import|error|bug|code|url|api|website)\b/i.test(userContent) && !userContent.includes('?'))
     );
 
-    const cleanPrompt = typeof userContent === 'string' ? userContent.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').replace(/@\w+/gi, `[CHARACTER LIKENESS: ${avatarLikeness}]`).trim() : '';
+    let cleanPrompt = typeof userContent === 'string' ? userContent.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').replace(/@\w+/gi, `[CHARACTER LIKENESS: ${avatarLikeness}]`).trim() : '';
+    if (isImageFollowUp && !isImageRequest) {
+      const lastUserPromptMsg = messages.slice().reverse().find(m => m.role === 'user');
+      const prevPrompt = lastUserPromptMsg && typeof lastUserPromptMsg.content === 'string' ? lastUserPromptMsg.content : '';
+      cleanPrompt = `${prevPrompt}, modified instruction: ${cleanPrompt}, hyper-realistic photography, award-winning shot`;
+    }
 
     const userMessage = { role: 'user', content: userContent };
     const newMessages = [...messages, userMessage];
@@ -82,7 +92,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     setIsLoading(true);
 
     try {
-      if (isImageRequest) {
+      if (isImageRequest || isImageFollowUp) {
         console.log("Direct Client-Side Image Generation from 24/7 Cloud Run API...");
         try {
           const cloudRes = await fetch("https://flux-image-gen-backend-git-520088884410.asia-south2.run.app/api/v1/images/generate", {
