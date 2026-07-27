@@ -85,6 +85,47 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     setIsLoading(true);
 
     try {
+      if (isImageRequest) {
+        console.log("Direct Client-Side Image Generation from 24/7 Cloud Run API...");
+        const cleanPrompt = typeof userContent === 'string' ? userContent.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').trim() : '';
+        try {
+          const cloudRes = await fetch("https://flux-image-gen-backend-git-520088884410.asia-south2.run.app/api/v1/images/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: cleanPrompt,
+              model_type: "dev",
+              aspect_ratio: "16:9",
+              loras: [{ "name": "cyberpunk_human", "scale": 0.85 }],
+              guidance_scale: 3.5,
+              num_inference_steps: 28,
+              output_format: "webp",
+              n: 1,
+              size: "1024x1024"
+            })
+          });
+          if (cloudRes.ok) {
+            const imgData = await cloudRes.json();
+            let imgUrl = imgData?.url || imgData?.image_url || imgData?.image || imgData?.result || imgData?.output || imgData?.data?.[0]?.url || imgData?.data?.url || imgData?.images?.[0] || '';
+            if (!imgUrl && (imgData?.base64 || imgData?.image_base64 || imgData?.data?.[0]?.b64_json)) {
+              const b64 = imgData.base64 || imgData.image_base64 || imgData.data?.[0]?.b64_json;
+              imgUrl = b64.startsWith('data:') ? b64 : `data:image/webp;base64,${b64}`;
+            }
+            if (imgUrl) {
+              const aiResponse = {
+                role: 'assistant',
+                content: `### 📸 Generated Masterpiece (FLUX.1 Dev & Pro Cloud Engine)\n\n![${cleanPrompt}](${imgUrl})\n\n**Prompt:** *${cleanPrompt}*\n**Engine:** *FLUX.1 (Dev & Pro) 24/7 Cloud API*`
+              };
+              onUpdateMessages([...newMessages, aiResponse]);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (imgErr) {
+          console.warn("Direct Cloud Run FLUX API client fallback:", imgErr.message);
+        }
+      }
+
       let messagesToSend = newMessages;
 
       // Connect to secure Vercel serverless function
@@ -113,7 +154,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       onUpdateMessages([...newMessages, aiResponse]);
     } catch (error) {
       console.error('Error fetching response:', error);
-      onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Backend Connection Error:**\n\n${error.message}\n\n*If this says "Failed to fetch", you are probably on the wrong port (make sure URL is localhost:8888, not 5173). If it says "Unexpected token", the Netlify server crashed.*` }]);
+      onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Backend Error:**\n\n${error.message}\n\n*Please check your Vercel environment variables or ensure your network connection is stable.*` }]);
     } finally {
       setIsLoading(false);
     }
