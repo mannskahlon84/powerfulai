@@ -96,7 +96,7 @@ export default async function handler(req, res) {
           pureSceneUpdate += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
         }
 
-        imagePrompt = `EXACT SUBJECTS AND SCENE: (${prevPromptText}). SCENE MODIFICATION: ${pureSceneUpdate}. EXPLICIT MANDATE: Keep the exact same subjects from (${prevPromptText}), standing upright on their feet next to one single motorcycle, nobody sitting on the bike, desert sand dunes background, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
+        imagePrompt = `A crisp RAW DSLR photograph of ${prevPromptText}, with modification: ${pureSceneUpdate}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
       }
       
       if (imagePrompt) {
@@ -111,8 +111,8 @@ export default async function handler(req, res) {
           detectedAspectRatio = "3:4";
         }
 
-        if (/\b(not sitting|standing|stand)\b/i.test(imagePrompt) && !imagePrompt.includes("nobody sitting")) {
-          imagePrompt += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life";
+        if (!/photograph|photo|dslr|8k|35mm/i.test(imagePrompt)) {
+          imagePrompt = `A crisp RAW DSLR photograph of ${imagePrompt}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
         }
 
         console.log("Image Intercept Triggered. Prompt:", imagePrompt, "Aspect Ratio:", detectedAspectRatio);

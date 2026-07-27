@@ -120,13 +120,17 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         pureSceneUpdate += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
       }
 
-      cleanPrompt = `EXACT SUBJECTS AND SCENE: (${prevPromptText}). SCENE MODIFICATION: ${pureSceneUpdate}. EXPLICIT MANDATE: Keep the exact same subjects from (${prevPromptText}), standing upright on their feet next to one single motorcycle, nobody sitting on the bike, desert sand dunes background, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
+      cleanPrompt = `A crisp RAW DSLR photograph of ${prevPromptText}, with modification: ${pureSceneUpdate}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
     } else if (isImageRequest) {
       let reframedPrompt = cleanPrompt;
       if (/\b(not sitting|standing|stand)\b/i.test(cleanPrompt)) {
         reframedPrompt += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
       }
-      cleanPrompt = `${reframedPrompt}, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
+      if (!/photograph|photo|dslr|8k|35mm/i.test(reframedPrompt)) {
+        cleanPrompt = `A crisp RAW DSLR photograph of ${reframedPrompt}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
+      } else {
+        cleanPrompt = reframedPrompt;
+      }
     }
 
     const userMessage = { role: 'user', content: userContent };
@@ -175,7 +179,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         }
 
         // Instant Client-Side Fallback FLUX.1 Image so it NEVER fails, never times out, and never crashes Vercel:
-        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=${fallbackWidth}&height=${fallbackHeight}&model=flux&nologo=true`;
+        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=${fallbackWidth}&height=${fallbackHeight}&model=flux-realism&nologo=true&enhance=false`;
         const aiResponse = {
           role: 'assistant',
           content: `![Generated Image](${fallbackUrl})`
