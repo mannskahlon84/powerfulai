@@ -86,40 +86,74 @@ export default async function handler(req, res) {
         let imageUrl = "";
         let generatorName = "";
         const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
-        const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://mannskahlon84--image-gen-service-fastapi-app.modal.run/v1').replace(/\/$/, '');
+        const imageApiBaseUrl = (process.env.IMAGE_API_BASE_URL || 'https://flux-image-gen-backend-git-520088884410.asia-south2.run.app/api/v1').replace(/\/$/, '');
         let modalSuccess = false;
         let modalError = "Unknown error";
         let openAiError = "";
 
-        // Priority 1: Custom Modal GPU Image Gen App (automatic retry loop across endpoints with 20s timeout each)
+        // Priority 1: Custom 24/7 FLUX.1 (Dev & Pro) Image Generation Cloud API (with fallback to Modal GPU)
         const tryEndpoints = [
+          `https://flux-image-gen-backend-git-520088884410.asia-south2.run.app/api/v1/images/generate`,
+          `${imageApiBaseUrl}/images/generate`,
           `${imageApiBaseUrl}/images/generations`,
           `${imageApiBaseUrl}/generate`,
-          imageApiBaseUrl
+          `https://mannskahlon84--image-gen-service-fastapi-app.modal.run/v1/images/generate`,
+          `https://mannskahlon84--image-gen-service-fastapi-app.modal.run/v1/images/generations`
         ];
 
-        console.log("Using Custom GPU Modal Image Engine:", imageApiBaseUrl);
+        console.log("Using Custom GPU Image Engine:", imageApiBaseUrl);
         for (const targetUrl of tryEndpoints) {
           try {
-            console.log("Attempting Modal image endpoint:", targetUrl);
+            console.log("Attempting image endpoint:", targetUrl);
+            const isFluxEndpoint = targetUrl.includes('flux-image-gen') || targetUrl.includes('/images/generate');
+            const bodyPayload = isFluxEndpoint ? {
+              prompt: imagePrompt,
+              model_type: "dev",
+              aspect_ratio: "16:9",
+              loras: [
+                {
+                  "name": "cyberpunk_human",
+                  "scale": 0.85
+                }
+              ],
+              guidance_scale: 3.5,
+              num_inference_steps: 28,
+              output_format: "webp",
+              n: 1,
+              size: "1024x1024"
+            } : {
+              prompt: imagePrompt,
+              n: 1,
+              size: "1024x1024"
+            };
+
             const modalRes = await fetch(targetUrl, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${modalApiKey}`
               },
-              body: JSON.stringify({
-                prompt: imagePrompt,
-                n: 1,
-                size: "1024x1024"
-              }),
+              body: JSON.stringify(bodyPayload),
               signal: AbortSignal.timeout(20000)
             });
-            if (modalRes.ok) {
+
+            const contentType = modalRes.headers.get('content-type') || '';
+            if (modalRes.ok && contentType.includes('application/json')) {
               const modalData = await modalRes.json();
-              imageUrl = modalData?.data?.[0]?.url || modalData?.url || modalData?.image_url || modalData?.image || '';
+              imageUrl = modalData?.url || 
+                         modalData?.image_url || 
+                         modalData?.image || 
+                         modalData?.result || 
+                         modalData?.output || 
+                         modalData?.data?.[0]?.url || 
+                         modalData?.data?.url ||
+                         modalData?.images?.[0] || '';
+              if (!imageUrl && (modalData?.base64 || modalData?.image_base64 || modalData?.data?.[0]?.b64_json)) {
+                const b64 = modalData.base64 || modalData.image_base64 || modalData.data?.[0]?.b64_json;
+                imageUrl = b64.startsWith('data:') ? b64 : `data:image/webp;base64,${b64}`;
+              }
               if (imageUrl) {
-                generatorName = "Custom Modal GPU Image Engine";
+                generatorName = targetUrl.includes('flux-image-gen') ? "FLUX.1 (Dev & Pro) 24/7 Cloud API" : "Custom Modal GPU Image Engine";
                 modalSuccess = true;
                 break;
               }
@@ -128,7 +162,7 @@ export default async function handler(req, res) {
             }
           } catch (err) {
             modalError = err.message;
-            console.log(`Modal endpoint ${targetUrl} failed:`, err.message);
+            console.log(`Endpoint ${targetUrl} failed:`, err.message);
           }
         }
 
@@ -169,11 +203,11 @@ export default async function handler(req, res) {
         
         // NEVER fall back to Pollinations! If Modal & OpenAI fail, return a clear, actionable error message.
         if (!modalSuccess) {
-          let errDetail = `**Modal GPU Error:** \`${modalError}\``;
+          let errDetail = `**GPU Engine Error:** \`${modalError}\``;
           if (openAiError) {
             errDetail += `\n**OpenAI Error:** \`${openAiError}\``;
           }
-          data.choices[0].message.content = `🚨 **Modal GPU Image Engine Currently Unreachable**\n\nWe attempted to generate your photoshoot image using your custom Modal GPU service (\`${imageApiBaseUrl}\`), but the server could not be reached or returned an error.\n\n${errDetail}\n\n**Why did this happen?**\n- Your Modal Serverless GPU container (\`image-gen-fastapi-app\`) returned **404 Not Found** because that app name is not currently deployed on your Modal account, or has a different URL path.\n\n**How to fix:**\n1. Check your Modal dashboard (\`modal.com/apps\`) to see the exact URL of your running image generation app.\n2. In Vercel -> **Settings** -> **Environment Variables**, set **\`IMAGE_API_BASE_URL\`** to your exact Modal image app URL (or share the URL with us to update as default)!\n\n*(Original prompt: ${imagePrompt})*`;
+          data.choices[0].message.content = `🚨 **Custom GPU Image Engine Currently Unreachable**\n\nWe attempted to generate your image using your Custom 24/7 FLUX.1 Cloud API (\`${imageApiBaseUrl}\`), but the server could not be reached or returned an error.\n\n${errDetail}\n\n**How to fix:**\n1. Ensure your Google Cloud Run FLUX.1 container is deployed and online.\n2. In Vercel -> **Settings** -> **Environment Variables**, check **\`IMAGE_API_BASE_URL\`**.\n\n*(Original prompt: ${imagePrompt})*`;
         } else {
           data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
         }
