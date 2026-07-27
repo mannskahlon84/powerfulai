@@ -83,13 +83,20 @@ export default async function handler(req, res) {
       } else if (isDirectImageCmd) {
         imagePrompt = lastUserMsg.trim();
       } else if (isImageFollowUp) {
-        const lastUserPromptMsg = messages.slice().reverse().find(m => m.role === 'user' && m !== messages[messages.length - 1]);
-        const prevPrompt = lastUserPromptMsg && typeof lastUserPromptMsg.content === 'string' ? lastUserPromptMsg.content : '';
-        let reframed = lastUserMsg.trim();
-        if (/\b(not sitting|standing|stand)\b/i.test(reframed)) {
-          reframed += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
+        const prevPrompts = messages.filter(m => m.role === 'user' && typeof m.content === 'string' && m !== messages[messages.length - 1]);
+        const bestPrev = prevPrompts.find(m => m.content.length > 30) || prevPrompts[prevPrompts.length - 1];
+        const prevPromptText = bestPrev ? bestPrev.content.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').trim() : '';
+        
+        let pureSceneUpdate = lastUserMsg.trim()
+          .replace(/\b(makthe|make the|make|picture|as|9:16|16:9|1:1|instagram|reels|reel|size|aspect|ratio|vertical|portrait|landscape)\b/gi, '')
+          .replace(/[,.]+/g, ', ')
+          .trim();
+
+        if (/\b(not sitting|standing|stand)\b/i.test(pureSceneUpdate)) {
+          pureSceneUpdate += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
         }
-        imagePrompt = `${prevPrompt}, modified instruction: ${reframed}, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
+
+        imagePrompt = `EXACT SUBJECTS AND SCENE: (${prevPromptText}). SCENE MODIFICATION: ${pureSceneUpdate}. EXPLICIT MANDATE: Keep the exact same subjects from (${prevPromptText}), standing upright on their feet next to one single motorcycle, nobody sitting on the bike, desert sand dunes background, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
       }
       
       if (imagePrompt) {

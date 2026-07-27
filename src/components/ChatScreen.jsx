@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, AudioLines, Activity, User } from 'lucide-react';
+import { Send, Plus, Camera, File, Image, Video, Music, Sparkles, Mic, Volume2, Square, AudioLines, Activity, User, Download } from 'lucide-react';
 import { useSpeech } from '../hooks/useSpeech';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -107,13 +107,20 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     }
 
     if (isImageFollowUp && !isImageRequest) {
-      const lastUserPromptMsg = messages.slice().reverse().find(m => m.role === 'user');
-      const prevPrompt = lastUserPromptMsg && typeof lastUserPromptMsg.content === 'string' ? lastUserPromptMsg.content : '';
-      let reframedInstruction = cleanPrompt;
-      if (/\b(not sitting|standing|stand)\b/i.test(cleanPrompt)) {
-        reframedInstruction += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
+      const prevPrompts = messages.filter(m => m.role === 'user' && typeof m.content === 'string');
+      const bestPrev = prevPrompts.find(m => m.content.length > 30) || prevPrompts[prevPrompts.length - 1];
+      const prevPromptText = bestPrev ? bestPrev.content.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').trim() : '';
+      
+      let pureSceneUpdate = cleanPrompt
+        .replace(/\b(makthe|make the|make|picture|as|9:16|16:9|1:1|instagram|reels|reel|size|aspect|ratio|vertical|portrait|landscape)\b/gi, '')
+        .replace(/[,.]+/g, ', ')
+        .trim();
+
+      if (/\b(not sitting|standing|stand)\b/i.test(pureSceneUpdate)) {
+        pureSceneUpdate += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
       }
-      cleanPrompt = `${prevPrompt}, modified instruction: ${reframedInstruction}, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
+
+      cleanPrompt = `EXACT SUBJECTS AND SCENE: (${prevPromptText}). SCENE MODIFICATION: ${pureSceneUpdate}. EXPLICIT MANDATE: Keep the exact same subjects from (${prevPromptText}), standing upright on their feet next to one single motorcycle, nobody sitting on the bike, desert sand dunes background, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
     } else if (isImageRequest) {
       let reframedPrompt = cleanPrompt;
       if (/\b(not sitting|standing|stand)\b/i.test(cleanPrompt)) {
@@ -420,12 +427,18 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
                 }
               }
 
+              const isImageMsg = msg.role === 'assistant' && typeof contentString === 'string' && contentString.includes('![') && contentString.trim().startsWith('![');
+              const imageUrlMatch = isImageMsg ? contentString.match(/!\[.*?\]\((.*?)\)/) : null;
+              const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
+
               return (
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
                   <div className={`rounded-2xl shadow-sm ${
                     msg.role === 'user' 
                       ? 'bg-primary text-white ml-12 rounded-br-sm px-5 py-3 max-w-[85%]' 
-                      : 'bg-panel/80 backdrop-blur-md border border-border/50 text-textMain mr-8 rounded-xl px-6 py-5 w-full'
+                      : isImageMsg
+                        ? 'bg-panel/80 backdrop-blur-md border border-border/50 text-textMain mr-8 rounded-xl px-6 py-5 w-fit max-w-full'
+                        : 'bg-panel/80 backdrop-blur-md border border-border/50 text-textMain mr-8 rounded-xl px-6 py-5 w-full'
                   }`}>
                     <div id={`msg-content-${idx}`} className={msg.role === 'user' ? 'text-[15px]' : 'text-[15px] leading-relaxed'}>
                       {Array.isArray(msg.content) ? (
@@ -472,20 +485,45 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
                         )}
                         
                         <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => {
-                              if (isSpeaking) {
-                                stopSpeaking();
-                              } else {
-                                speak(contentString);
-                              }
-                            }}
-                            className={`flex items-center gap-1.5 transition-colors text-[13px] font-medium ${isSpeaking ? 'text-primary animate-pulse' : 'hover:text-primary'}`}
-                            title={isSpeaking ? "Stop reading" : "Read aloud"}
-                          >
-                            {isSpeaking ? <Square size={14} /> : <Volume2 size={14} />} 
-                            {isSpeaking ? 'Stop' : 'Read'}
-                          </button>
+                          {isImageMsg && imageUrl ? (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch(imageUrl);
+                                  const blob = await response.blob();
+                                  const blobUrl = window.URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = blobUrl;
+                                  a.download = `powerful-ai-${Date.now()}.webp`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  window.URL.revokeObjectURL(blobUrl);
+                                } catch (e) {
+                                  window.open(imageUrl, '_blank');
+                                }
+                              }}
+                              className="flex items-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-xl transition-all font-medium text-sm border border-primary/20 shadow-sm"
+                              title="Download high-resolution image"
+                            >
+                              <Download size={16} /> Download Image
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => {
+                                if (isSpeaking) {
+                                  stopSpeaking();
+                                } else {
+                                  speak(contentString);
+                                }
+                              }}
+                              className={`flex items-center gap-1.5 transition-colors text-[13px] font-medium ${isSpeaking ? 'text-primary animate-pulse' : 'hover:text-primary'}`}
+                              title={isSpeaking ? "Stop reading" : "Read aloud"}
+                            >
+                              {isSpeaking ? <Square size={14} /> : <Volume2 size={14} />} 
+                              {isSpeaking ? 'Stop' : 'Read'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
