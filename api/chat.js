@@ -85,11 +85,30 @@ export default async function handler(req, res) {
       } else if (isImageFollowUp) {
         const lastUserPromptMsg = messages.slice().reverse().find(m => m.role === 'user' && m !== messages[messages.length - 1]);
         const prevPrompt = lastUserPromptMsg && typeof lastUserPromptMsg.content === 'string' ? lastUserPromptMsg.content : '';
-        imagePrompt = `${prevPrompt}, modified instruction: ${lastUserMsg.trim()}, hyper-realistic photography`;
+        let reframed = lastUserMsg.trim();
+        if (/\b(not sitting|standing|stand)\b/i.test(reframed)) {
+          reframed += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
+        }
+        imagePrompt = `${prevPrompt}, modified instruction: ${reframed}, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
       }
       
       if (imagePrompt) {
-        console.log("Image Intercept Triggered. Prompt:", imagePrompt);
+        let detectedAspectRatio = "16:9";
+        if (/\b(9:16|9 by 16|9x16|vertical|reels|reel|tiktok|story|shorts|portrait)\b/i.test(lastUserMsg)) {
+          detectedAspectRatio = "9:16";
+        } else if (/\b(1:1|square|insta post|instagram post)\b/i.test(lastUserMsg)) {
+          detectedAspectRatio = "1:1";
+        } else if (/\b(4:3|4 by 3)\b/i.test(lastUserMsg)) {
+          detectedAspectRatio = "4:3";
+        } else if (/\b(3:4|3 by 4)\b/i.test(lastUserMsg)) {
+          detectedAspectRatio = "3:4";
+        }
+
+        if (/\b(not sitting|standing|stand)\b/i.test(imagePrompt) && !imagePrompt.includes("nobody sitting")) {
+          imagePrompt += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life";
+        }
+
+        console.log("Image Intercept Triggered. Prompt:", imagePrompt, "Aspect Ratio:", detectedAspectRatio);
         
         let imageUrl = "";
         let generatorName = "";
@@ -117,7 +136,7 @@ export default async function handler(req, res) {
             const bodyPayload = isFluxEndpoint ? {
               prompt: imagePrompt,
               model_type: "dev",
-              aspect_ratio: "16:9",
+              aspect_ratio: detectedAspectRatio,
               guidance_scale: 3.5,
               num_inference_steps: 28,
               output_format: "webp",

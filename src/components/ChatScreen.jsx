@@ -79,10 +79,47 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     );
 
     let cleanPrompt = typeof userContent === 'string' ? userContent.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').replace(/@\w+/gi, `[CHARACTER LIKENESS: ${avatarLikeness}]`).trim() : '';
+
+    // Dynamic Aspect Ratio Detection (Instagram Reels 9:16, Square 1:1, Landscape 16:9, etc.)
+    let detectedAspectRatio = "16:9";
+    let fallbackWidth = 1024;
+    let fallbackHeight = 576;
+    if (/\b(9:16|9 by 16|9x16|vertical|reels|reel|tiktok|story|shorts|portrait)\b/i.test(userContent)) {
+      detectedAspectRatio = "9:16";
+      fallbackWidth = 576;
+      fallbackHeight = 1024;
+    } else if (/\b(1:1|square|insta post|instagram post)\b/i.test(userContent)) {
+      detectedAspectRatio = "1:1";
+      fallbackWidth = 1024;
+      fallbackHeight = 1024;
+    } else if (/\b(4:3|4 by 3)\b/i.test(userContent)) {
+      detectedAspectRatio = "4:3";
+      fallbackWidth = 1024;
+      fallbackHeight = 768;
+    } else if (/\b(3:4|3 by 4)\b/i.test(userContent)) {
+      detectedAspectRatio = "3:4";
+      fallbackWidth = 768;
+      fallbackHeight = 1024;
+    } else if (/\b(16:9|widescreen|landscape|cinema|cinematic)\b/i.test(userContent)) {
+      detectedAspectRatio = "16:9";
+      fallbackWidth = 1024;
+      fallbackHeight = 576;
+    }
+
     if (isImageFollowUp && !isImageRequest) {
       const lastUserPromptMsg = messages.slice().reverse().find(m => m.role === 'user');
       const prevPrompt = lastUserPromptMsg && typeof lastUserPromptMsg.content === 'string' ? lastUserPromptMsg.content : '';
-      cleanPrompt = `${prevPrompt}, modified instruction: ${cleanPrompt}, hyper-realistic photography, award-winning shot`;
+      let reframedInstruction = cleanPrompt;
+      if (/\b(not sitting|standing|stand)\b/i.test(cleanPrompt)) {
+        reframedInstruction += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
+      }
+      cleanPrompt = `${prevPrompt}, modified instruction: ${reframedInstruction}, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
+    } else if (isImageRequest) {
+      let reframedPrompt = cleanPrompt;
+      if (/\b(not sitting|standing|stand)\b/i.test(cleanPrompt)) {
+        reframedPrompt += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
+      }
+      cleanPrompt = `${reframedPrompt}, hyper-realistic RAW DSLR photograph, award-winning 8k uhd photography, anatomically perfect real human skin texture and faces, zero animation, zero 3D render, photorealistic real life`;
     }
 
     const userMessage = { role: 'user', content: userContent };
@@ -102,7 +139,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             body: JSON.stringify({
               prompt: cleanPrompt,
               model_type: "dev",
-              aspect_ratio: "16:9",
+              aspect_ratio: detectedAspectRatio,
               guidance_scale: 3.5,
               num_inference_steps: 28,
               output_format: "webp",
@@ -131,11 +168,12 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         }
 
         // Instant Client-Side Fallback FLUX.1 Image so it NEVER fails, never times out, and never crashes Vercel:
-        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1024&height=576&model=flux&nologo=true`;
+        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=${fallbackWidth}&height=${fallbackHeight}&model=flux&nologo=true`;
         const aiResponse = {
           role: 'assistant',
           content: `![Generated Image](${fallbackUrl})`
         };
+
         onUpdateMessages([...newMessages, aiResponse]);
         setIsLoading(false);
         return;
