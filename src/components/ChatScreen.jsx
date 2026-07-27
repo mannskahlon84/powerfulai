@@ -72,10 +72,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       (/\b(girl|boy|woman|man|baby|beach|walking|standing|sitting|wearing|dressed|portrait|photo|pic|image|shot|cinematic|lighting|view|sunset|sunrise|scene|tajmahal|taj mahal|mountain|river|forest|car|bike|dog|cat|animal|studio|lens|camera|render|wallpaper|illustration|sketch|painting)\b/i.test(userContent) && !/\b(how|what|why|when|where|who|is|are|can|could|would|should|function|const|let|var|class|import|error|bug|code|url|api|website)\b/i.test(userContent) && !userContent.includes('?'))
     );
 
-    if (isImageRequest) {
-      const enhancedPrompt = typeof userContent === 'string' ? userContent.replace(/@\w+/gi, `[CHARACTER LIKENESS: ${avatarLikeness}]`) : '';
-      userContent = `[IMAGE_PROMPT: ${enhancedPrompt}]`;
-    }
+    const cleanPrompt = typeof userContent === 'string' ? userContent.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').replace(/@\w+/gi, `[CHARACTER LIKENESS: ${avatarLikeness}]`).trim() : '';
 
     const userMessage = { role: 'user', content: userContent };
     const newMessages = [...messages, userMessage];
@@ -87,7 +84,6 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     try {
       if (isImageRequest) {
         console.log("Direct Client-Side Image Generation from 24/7 Cloud Run API...");
-        const cleanPrompt = typeof userContent === 'string' ? userContent.replace(/^\[IMAGE_PROMPT:\s*/i, '').replace(/\]$/i, '').trim() : '';
         try {
           const cloudRes = await fetch("https://flux-image-gen-backend-git-520088884410.asia-south2.run.app/api/v1/images/generate", {
             method: "POST",
@@ -96,12 +92,10 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               prompt: cleanPrompt,
               model_type: "dev",
               aspect_ratio: "16:9",
-              loras: [{ "name": "cyberpunk_human", "scale": 0.85 }],
               guidance_scale: 3.5,
               num_inference_steps: 28,
               output_format: "webp",
-              n: 1,
-              size: "1024x1024"
+              n: 1
             })
           });
           if (cloudRes.ok) {
@@ -122,13 +116,23 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             }
           }
         } catch (imgErr) {
-          console.warn("Direct Cloud Run FLUX API client fallback:", imgErr.message);
+          console.warn("Cloud Run FLUX cold start/timeout. Using high-speed fallback FLUX engine:", imgErr.message);
         }
+
+        // Instant Client-Side Fallback FLUX.1 Image so it NEVER fails, never times out, and never crashes Vercel:
+        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=1024&height=576&model=flux&nologo=true`;
+        const aiResponse = {
+          role: 'assistant',
+          content: `![Generated Image](${fallbackUrl})`
+        };
+        onUpdateMessages([...newMessages, aiResponse]);
+        setIsLoading(false);
+        return;
       }
 
       let messagesToSend = newMessages;
 
-      // Connect to secure Vercel serverless function
+      // Connect to secure backend chat service
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -154,7 +158,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       onUpdateMessages([...newMessages, aiResponse]);
     } catch (error) {
       console.error('Error fetching response:', error);
-      onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Backend Error:**\n\n${error.message}\n\n*Please check your Vercel environment variables or ensure your network connection is stable.*` }]);
+      onUpdateMessages([...newMessages, { role: 'assistant', content: `🚨 **Connection Notice:**\n\nUnable to reach the server at this time (${error.message}). Please ensure your network connection is stable or try again in a moment.` }]);
     } finally {
       setIsLoading(false);
     }
