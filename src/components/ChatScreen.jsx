@@ -120,17 +120,13 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         pureSceneUpdate += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
       }
 
-      cleanPrompt = `A crisp RAW DSLR photograph of ${prevPromptText}, with modification: ${pureSceneUpdate}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
+      cleanPrompt = `${prevPromptText}, with modification: ${pureSceneUpdate}, 8k resolution, cinematic lighting, masterpiece, highly detailed`;
     } else if (isImageRequest) {
       let reframedPrompt = cleanPrompt;
       if (/\b(not sitting|standing|stand)\b/i.test(cleanPrompt)) {
         reframedPrompt += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
       }
-      if (!/photograph|photo|dslr|8k|35mm/i.test(reframedPrompt)) {
-        cleanPrompt = `A crisp RAW DSLR photograph of ${reframedPrompt}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
-      } else {
-        cleanPrompt = reframedPrompt;
-      }
+      cleanPrompt = `${reframedPrompt}, 8k resolution, cinematic lighting, masterpiece, highly detailed`;
     }
 
     const userMessage = { role: 'user', content: userContent };
@@ -152,9 +148,16 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               model_type: "dev",
               aspect_ratio: detectedAspectRatio,
               guidance_scale: 3.5,
-              num_inference_steps: 28,
-              output_format: "webp",
-              n: 1
+              num_inference_steps: 50,
+              quality: 100,
+              output_format: "png",
+              n: 1,
+              loras: [
+                {
+                  name: "cinematic_avatar",
+                  scale: 0.85
+                }
+              ]
             })
           });
           if (cloudRes.ok) {
@@ -162,7 +165,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             let imgUrl = imgData?.url || imgData?.image_url || imgData?.image || imgData?.result || imgData?.output || imgData?.data?.[0]?.url || imgData?.data?.url || imgData?.images?.[0] || '';
             if (!imgUrl && (imgData?.base64 || imgData?.image_base64 || imgData?.data?.[0]?.b64_json)) {
               const b64 = imgData.base64 || imgData.image_base64 || imgData.data?.[0]?.b64_json;
-              imgUrl = b64.startsWith('data:') ? b64 : `data:image/webp;base64,${b64}`;
+              imgUrl = b64.startsWith('data:') ? b64 : `data:image/png;base64,${b64}`;
             }
             if (imgUrl) {
               const aiResponse = {

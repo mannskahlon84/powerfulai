@@ -96,7 +96,7 @@ export default async function handler(req, res) {
           pureSceneUpdate += ", standing upright on their feet next to one single motorcycle parked on the road, full body standing shot, nobody sitting on the bike, exactly one bike only";
         }
 
-        imagePrompt = `A crisp RAW DSLR photograph of ${prevPromptText}, with modification: ${pureSceneUpdate}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
+        imagePrompt = `${prevPromptText}, with modification: ${pureSceneUpdate}, 8k resolution, cinematic lighting, masterpiece, highly detailed`;
       }
       
       if (imagePrompt) {
@@ -111,8 +111,8 @@ export default async function handler(req, res) {
           detectedAspectRatio = "3:4";
         }
 
-        if (!/photograph|photo|dslr|8k|35mm/i.test(imagePrompt)) {
-          imagePrompt = `A crisp RAW DSLR photograph of ${imagePrompt}, cinematic lighting, sharp focus, 8k resolution, shot on 35mm lens, photorealistic`;
+        if (!/masterpiece|8k resolution/i.test(imagePrompt)) {
+          imagePrompt = `${imagePrompt}, 8k resolution, cinematic lighting, masterpiece, highly detailed`;
         }
 
         console.log("Image Intercept Triggered. Prompt:", imagePrompt, "Aspect Ratio:", detectedAspectRatio);
@@ -145,9 +145,16 @@ export default async function handler(req, res) {
               model_type: "dev",
               aspect_ratio: detectedAspectRatio,
               guidance_scale: 3.5,
-              num_inference_steps: 28,
-              output_format: "webp",
-              n: 1
+              num_inference_steps: 50,
+              quality: 100,
+              output_format: "png",
+              n: 1,
+              loras: [
+                {
+                  name: "cinematic_avatar",
+                  scale: 0.85
+                }
+              ]
             } : {
               prompt: imagePrompt,
               n: 1,
