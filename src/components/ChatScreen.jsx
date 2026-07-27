@@ -66,7 +66,8 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
     );
     const lastAssistantImgMsg = messages.slice().reverse().find(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('!['));
     const isImageFollowUp = !!lastAssistantImgMsg && typeof userContent === 'string' && (
-      /\b(make|change|add|remove|turn|show|put|replace|more|less|like|real|human|humans|background|desert|dessert|road|bike|car|face|color|light|lighting|style|day|night|sunset|look|without|with)\b/i.test(userContent)
+      /\b(make|change|add|remove|turn|show|put|replace|more|less|like|real|human|humans|background|desert|dessert|road|bike|car|face|color|light|lighting|style|day|night|sunset|look|without|with|better|quality|animation|realistic|angle|smile|only|backside|front|side|scene|shot|photo|image|picture|person|people|hair|dress|clothes|sky|cloud|clouds|trees|water|ocean|sea|sand)\b/i.test(userContent) ||
+      (userContent.trim().length <= 60 && !userContent.includes('?') && !/\b(hi|hello|hey|thanks|thank|ok|okay|yes|no|why|what|how|where|when|who|code|error|bug|api|url)\b/i.test(userContent))
     ) && !/\b(how|what|why|when|where|who|url|website|code|error|api)\b/i.test(userContent);
 
     const isImageRequest = typeof userContent === 'string' && (
