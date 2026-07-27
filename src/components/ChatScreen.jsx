@@ -114,7 +114,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             if (imgUrl) {
               const aiResponse = {
                 role: 'assistant',
-                content: `### 📸 Generated Masterpiece (FLUX.1 Dev & Pro Cloud Engine)\n\n![${cleanPrompt}](${imgUrl})\n\n**Prompt:** *${cleanPrompt}*\n**Engine:** *FLUX.1 (Dev & Pro) 24/7 Cloud API*`
+                content: `![Generated Image](${imgUrl})`
               };
               onUpdateMessages([...newMessages, aiResponse]);
               setIsLoading(false);

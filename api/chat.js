@@ -209,7 +209,7 @@ export default async function handler(req, res) {
           }
           data.choices[0].message.content = `🚨 **Custom GPU Image Engine Currently Unreachable**\n\nWe attempted to generate your image using your Custom 24/7 FLUX.1 Cloud API (\`${imageApiBaseUrl}\`), but the server could not be reached or returned an error.\n\n${errDetail}\n\n**How to fix:**\n1. Ensure your Google Cloud Run FLUX.1 container is deployed and online.\n2. In Vercel -> **Settings** -> **Environment Variables**, check **\`IMAGE_API_BASE_URL\`**.\n\n*(Original prompt: ${imagePrompt})*`;
         } else {
-          data.choices[0].message.content = `![Generated Image](${imageUrl})\n\n*(Generated with ${generatorName})*`;
+          data.choices[0].message.content = `![Generated Image](${imageUrl})`;
         }
       }
     } catch (e) {
