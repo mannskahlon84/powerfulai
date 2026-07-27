@@ -5,6 +5,7 @@ import {
   GithubAuthProvider, 
   OAuthProvider 
 } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 // These values will be loaded from your .env file
@@ -20,15 +21,17 @@ const firebaseConfig = {
 // Initialize Firebase safely
 let app;
 let auth;
+let db;
 
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
+  db = getFirestore(app);
 } catch (error) {
   console.error("Firebase initialization error", error);
 }
 
-export { auth };
+export { auth, db };
 
 export const googleProvider = new GoogleAuthProvider();
 export const githubProvider = new GithubAuthProvider();

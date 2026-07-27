@@ -6,6 +6,7 @@ import SettingsModal from './components/SettingsModal';
 import { Menu, Zap } from 'lucide-react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { saveChatHistoryToDb, loadChatHistoryFromDb } from './services/chatStorageService';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -38,9 +39,22 @@ function App() {
     return unsubscribe;
   }, []);
 
+  // Load persistent chat sessions from database when user session is active
+  useEffect(() => {
+    const userId = user?.uid || user?.email || 'default_user';
+    loadChatHistoryFromDb(userId).then(remoteHistory => {
+      if (remoteHistory && Array.isArray(remoteHistory) && remoteHistory.length > 0) {
+        setChatHistory(remoteHistory);
+      }
+    });
+  }, [user]);
+
+  // Sync chat history to localStorage and Firebase Firestore database on every turn
   useEffect(() => {
     localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-  }, [chatHistory]);
+    const userId = user?.uid || user?.email || 'default_user';
+    saveChatHistoryToDb(userId, chatHistory);
+  }, [chatHistory, user]);
 
   const activeChat = chatHistory.find(c => c.id === activeChatId) || chatHistory[0];
 
