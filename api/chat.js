@@ -37,6 +37,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid payload' });
   }
 
+  const sanitizeForLLM = (msgs) => {
+    if (!Array.isArray(msgs)) return [];
+    return msgs.map(m => {
+      let content = m.content;
+      if (Array.isArray(content)) {
+        content = content.map(c => ({
+          type: c.type,
+          ...(c.text ? { text: c.text } : {}),
+          ...(c.image_url ? { image_url: c.image_url } : {})
+        }));
+      } else {
+        content = String(content || '');
+      }
+      return {
+        role: m.role || 'user',
+        content: content
+      };
+    });
+  };
+
   const callProvider = async (url, apiKey, model, customMessages = null, timeoutMs = 6000) => {
     const response = await fetch(url, {
       method: 'POST',
@@ -46,7 +66,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: model,
-        messages: customMessages || messages
+        messages: sanitizeForLLM(customMessages || messages)
       }),
       signal: AbortSignal.timeout(timeoutMs)
     });

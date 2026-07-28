@@ -236,7 +236,20 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
       } catch (backendErr) {
         console.warn("Backend chat unavailable. Using instant client-side AI engine:", backendErr.message);
         let fallbackSuccess = false;
-        const lastMsgText = messagesToSend && messagesToSend.length > 0 ? (typeof messagesToSend[messagesToSend.length - 1].content === 'string' ? messagesToSend[messagesToSend.length - 1].content : '') : 'Hello';
+        const cleanClientMessages = (messagesToSend || []).map(m => {
+          let text = '';
+          if (Array.isArray(m.content)) {
+            text = m.content.map(c => c.text ? c.text : (c.image_url ? c.image_url.url : '')).join(' ');
+          } else {
+            text = String(m.content || '');
+          }
+          return {
+            role: m.role || 'user',
+            content: text
+          };
+        });
+        const lastMsgObj = cleanClientMessages[cleanClientMessages.length - 1];
+        const lastMsgText = lastMsgObj ? lastMsgObj.content : 'Hello';
         
         try {
           const groqApiKey = "gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw==");
@@ -248,7 +261,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             },
             body: JSON.stringify({
               model: "llama-3.1-8b-instant",
-              messages: messagesToSend
+              messages: cleanClientMessages
             })
           });
           if (groqRes.ok) {
@@ -276,7 +289,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         for (const pModel of fallbackModels) {
           if (fallbackSuccess) break;
           try {
-            const polBody = pModel === 'default' ? { messages: messagesToSend } : { messages: messagesToSend, model: pModel };
+            const polBody = pModel === 'default' ? { messages: cleanClientMessages } : { messages: cleanClientMessages, model: pModel };
             const polPostRes = await fetch("https://text.pollinations.ai/", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
