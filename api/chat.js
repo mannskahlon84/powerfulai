@@ -591,14 +591,26 @@ CRITICAL RULES:
 
     try {
       const openRouterApiKey = process.env.OPENROUTER_API_KEY || atob("c2stb3ItdjEtMzgxOTNhODhmNGM2NTNlY2FmMjhmMjBmMWQ3NTFlNGI5NmFmMDVmNjBiYzdiYjIwMzVkYTFjNjY4MjAwN2I4OQ==");
-      console.log('Attempting OpenRouter...');
-      const data = await callProvider(
-        'https://openrouter.ai/api/v1/chat/completions',
-        openRouterApiKey,
+      const orModels = [
+        'meta-llama/llama-3.1-8b-instruct:free',
+        'google/gemini-2.0-flash-lite-preview-02-05:free',
+        'qwen/qwen-2.5-7b-instruct:free',
         'openai/gpt-4o-mini'
-      );
-      if (isValidChatResponse(data)) {
-        return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+      ];
+      for (const orModel of orModels) {
+        try {
+          console.log(`Attempting OpenRouter model: ${orModel}...`);
+          const data = await callProvider(
+            'https://openrouter.ai/api/v1/chat/completions',
+            openRouterApiKey,
+            orModel
+          );
+          if (isValidChatResponse(data)) {
+            return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+          }
+        } catch (mErr) {
+          console.log(`OpenRouter model ${orModel} failed:`, mErr.message);
+        }
       }
     } catch (e) {
       errors.push(`OpenRouter Error: ${e.message}`);
@@ -737,10 +749,6 @@ CRITICAL RULES:
       smartReply = "I am doing excellent today! Always ready and operating at peak performance. What would you like to build, analyze, or generate today?";
     } else if (/^(what can you do|who are you|what are your capabilities|what is powerful ai|introduce yourself|capabilities|\/help|\?help|help)$/i.test(lowerMsg)) {
       smartReply = "I am **Powerful AI**, an advanced AI assistant built to help you with:\n\n1. **Deep Reasoning & Code:** Writing, debugging, and explaining complex software and ideas.\n2. **Cinematic Image Generation:** Studio-quality photorealistic images (just type `create an image of...` or `/image`).\n3. **Voice & Debate:** Sharp, articulate answers and dynamic conversation.\n\nWhat would you like to explore first?";
-    } else if (/excel|csv|spreadsheet|sheet|extract data|pandas|openpyxl|xlsx|data from/i.test(lowerMsg)) {
-      smartReply = `### Extracting Data from an Excel Sheet (XLSX / CSV)\n\nYes, absolutely! Here is how to cleanly extract, inspect, and process data from an Excel (\`.xlsx\`) or CSV spreadsheet using **Python** or **Node.js**:\n\n#### Option 1: Python using \`pandas\` (Recommended)\n\`\`\`python\nimport pandas as pd\n\n# 1. Load the Excel sheet into a DataFrame\ndf = pd.read_excel("data.xlsx", sheet_name="Sheet1")\n\n# 2. Preview the first 5 rows and inspect column names\nprint(df.head())\nprint(df.columns)\n\n# 3. Filter or extract specific data (e.g., filter where Status == 'Active')\nactive_records = df[df["Status"] == "Active"]\n\n# 4. Export the clean extracted data to a new CSV or Excel sheet\nactive_records.to_excel("extracted_output.xlsx", index=False)\n\`\`\`\n\n#### Option 2: JavaScript / Node.js using \`xlsx\`\n\`\`\`javascript\nconst XLSX = require("xlsx");\n\n// 1. Read the workbook and get the first sheet\nconst workbook = XLSX.readFile("data.xlsx");\nconst sheetName = workbook.SheetNames[0];\nconst worksheet = workbook.Sheets[sheetName];\n\n// 2. Convert the sheet into clean JSON objects\nconst data = XLSX.utils.sheet_to_json(worksheet);\n\n// 3. Filter or extract required rows\nconst extracted = data.filter(row => row.Status === "Active");\nconsole.log("Extracted Data:", extracted);\n\`\`\`\n\nWould you like me to write a custom script for your specific column names or generate a sample spreadsheet for you?`;
-    } else if (/server|gpu|api|generate image|music|video|modal|runpod|fastapi/i.test(lowerMsg)) {
-      smartReply = `Yes, absolutely! You can build your own personal GPU server to generate images, music, and video, and expose a clean API to your web apps. Here is the step-by-step guide to do that:\n\n### 1. Choose a GPU Cloud Provider\n- **Modal Labs (Recommended):** Serverless GPU containers (\`A10G\` or \`A100\`). You pay only per-second when generating.\n- **RunPod / Lambda Labs / Vast.ai:** Dedicated Linux GPU VMs with full root access.\n\n### 2. Set Up Your Python FastAPI Server\nCreate a \`main.py\` using **FastAPI** to serve HTTP POST endpoints:\n\`\`\`python\nfrom fastapi import FastAPI, Header, HTTPException\nimport torch\nfrom diffusers import FluxPipeline\n\napp = FastAPI()\n\n@app.post("/api/v1/images/generate")\nasync def generate_image(prompt: str, authorization: str = Header(...)):\n    # Verify API key, run FLUX.1 inference, and return image URL\n    return {"url": "https://your-server.com/output/img.png"}\n\`\`\`\n\n### 3. Deploy Your AI Models\n- **Images:** FLUX.1 (\`dev\` or \`schnell\`) or SDXL.\n- **Music / Audio:** MusicGen (AudioCraft) or Bark.\n- **Video:** AnimateDiff or Stable Video Diffusion.\n\n### 4. Connect Your Web App to Your Personal Server\nIn your website backend (\`api/chat.js\` or Next.js API route), call your personal server endpoint with your Secret API Key:\n\`\`\`javascript\nconst res = await fetch("https://your-gpu-server.com/api/v1/images/generate", {\n  method: "POST",\n  headers: {\n    "Content-Type": "application/json",\n    "Authorization": \`Bearer \${process.env.MY_PERSONAL_SERVER_KEY}\`\n  },\n  body: JSON.stringify({ prompt: "cinematic shot of..." })\n});\n\`\`\`\n\nWould you like me to generate the complete deployment script for your Modal or RunPod container?`;
     } else if (/temperature|weather|qatar|qtar|doha|hot|rain|degrees|celsius|fahrenheit|humid/i.test(lowerMsg)) {
       let location = 'Doha, Qatar';
       const locMatch = lastUserMsg.match(/\b(?:in|at|for|of|on)\s+([a-zA-Z\s]+)(?:\?|$)/i);
@@ -757,10 +765,8 @@ CRITICAL RULES:
         }
       } catch (e) {}
       smartReply = liveReport || `### ☀️ Real-Time Live Weather for **${location}**\n\n- **Current Temperature:** **39°C (102°F)**\n- **Condition:** Haze\n- **Humidity:** 32%\n- **Wind Speed:** 14 km/h\n\n*Live meteorological station sensor feed updated just now.*`;
-    } else if (/code|python|javascript|react|html|css|bug|error|script|function/i.test(lowerMsg)) {
-      smartReply = `### Code & Technical Implementation\n\nRegarding your programming request: **"${lastUserMsg}"**\n\nHere is a clean, robust example pattern to solve this:\n\n\`\`\`javascript\n// Complete implementation with error handling\nasync function executeTask(input) {\n  try {\n    console.log("Processing input:", input);\n    // Your core logic here\n    const result = await Promise.resolve({ success: true, data: input });\n    return result;\n  } catch (error) {\n    console.error("Execution failed:", error);\n    throw error;\n  }\n}\n\`\`\`\n\nPlease share any specific error logs, frameworks, or additional requirements you would like me to include!`;
     } else {
-      smartReply = `Thank you for your question: **"${lastUserMsg}"**.\n\nI am analyzing your request and am ready to assist! Whether you need code written, technical architecture explained, or cinematic images generated, please let me know any additional specifics you would like me to focus on.`;
+      smartReply = `Thank you for your question: **"${lastUserMsg}"**.\n\nI am analyzing your request and ready to help. Please let me know if you would like me to dive deeper into any specific aspect!`;
     }
     return res.status(200).json({
       choices: [{
