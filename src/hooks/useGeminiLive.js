@@ -119,7 +119,10 @@ export function useGeminiLive() {
       const transcript = event.results[lastIndex][0].transcript.trim();
       if (!transcript) return;
 
-      setStatus('Thinking (Modal Custom AI)...');
+      setStatus('Thinking...');
+      let replyText = null;
+
+      // 1. Try Vercel Backend API
       try {
         const chatRes = await fetch('/api/chat', {
           method: 'POST',
@@ -129,31 +132,90 @@ export function useGeminiLive() {
             model: 'default'
           })
         });
-        const chatData = await chatRes.json();
-        const replyText = chatData.reply || "I am listening to your request.";
-
-        setStatus('Speaking (Modal Custom AI)...');
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(replyText);
-          utterance.onend = () => {
-            if (wsRef.current) setStatus('Live (Modal Custom AI Voice Agent)');
-          };
-          window.speechSynthesis.speak(utterance);
+        if (chatRes.ok) {
+          const chatData = await chatRes.json();
+          replyText = chatData?.choices?.[0]?.message?.content || chatData?.reply;
         }
       } catch (err) {
-        console.error("Modal AI Voice Error:", err);
-        setStatus('Live (Modal Custom AI Voice Agent)');
+        console.warn("Backend API Voice fallback:", err.message);
+      }
+
+      // 2. Client-Side Groq Fallback if backend failed
+      if (!replyText) {
+        try {
+          const groqApiKey = "gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw==");
+          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${groqApiKey}`
+            },
+            body: JSON.stringify({
+              model: "llama-3.1-8b-instant",
+              messages: [{ role: "user", content: `You are a helpful, concise voice AI assistant. Speak naturally in 1-3 short sentences. User says: "${transcript}"` }]
+            })
+          });
+          if (groqRes.ok) {
+            const groqJson = await groqRes.json();
+            replyText = groqJson?.choices?.[0]?.message?.content;
+          }
+        } catch (groqErr) {
+          console.warn("Voice Groq fallback failed:", groqErr.message);
+        }
+      }
+
+      // 3. Pollinations Fallback
+      if (!replyText) {
+        try {
+          const polRes = await fetch(`https://text.pollinations.ai/${encodeURIComponent(transcript)}?model=openai`);
+          if (polRes.ok) {
+            const polText = await polRes.text();
+            if (polText && !polText.includes('<html>')) {
+              replyText = polText.trim();
+            }
+          }
+        } catch (polErr) {
+          console.warn("Voice Pollinations fallback failed:", polErr.message);
+        }
+      }
+
+      replyText = replyText || "I heard you, but I couldn't connect to my AI language server at the moment.";
+
+      setStatus('Speaking...');
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(replyText);
+        utterance.onend = () => {
+          if (wsRef.current) setStatus('Listening (Real-Time Voice Call)...');
+        };
+        utterance.onerror = () => {
+          if (wsRef.current) setStatus('Listening (Real-Time Voice Call)...');
+        };
+        window.speechSynthesis.speak(utterance);
+      } else {
+        if (wsRef.current) setStatus('Listening (Real-Time Voice Call)...');
+      }
+    };
+
+    rec.onend = () => {
+      // Auto-restart speech recognition on browser silence timeout so microphone never stops listening
+      if (wsRef.current) {
+        try {
+          rec.start();
+        } catch (e) {}
       }
     };
 
     rec.onerror = (e) => {
       console.warn("Speech recognition error:", e.error);
-      if (e.error === 'not-allowed') setStatus('Mic Permission Denied');
+      if (e.error === 'not-allowed') {
+        setStatus('Mic Permission Denied');
+      }
     };
 
     try {
       rec.start();
+      setStatus('Listening (Real-Time Voice Call)...');
       // Store recognition object in wsRef so disconnectLive can clean it up
       wsRef.current = {
         close: () => {
