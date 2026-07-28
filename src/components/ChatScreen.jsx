@@ -665,10 +665,14 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         </div>
       `;
 
-      reportDiv.style.position = 'absolute';
-      reportDiv.style.left = '-9999px';
-      reportDiv.style.top = '0';
+      reportDiv.style.position = 'fixed';
+      reportDiv.style.left = '0px';
+      reportDiv.style.top = '0px';
       reportDiv.style.width = '800px';
+      reportDiv.style.zIndex = '-9999';
+      reportDiv.style.pointerEvents = 'none';
+      reportDiv.style.backgroundColor = '#ffffff';
+      reportDiv.style.overflow = 'visible';
       document.body.appendChild(reportDiv);
 
       // Explicitly inject inline colors into DOM elements so html2canvas renders vibrant colors 100% of the time
@@ -694,20 +698,23 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         el.style.cssText += "border-left: 4px solid #4f46e5 !important; background-color: #f1f5f9 !important; padding: 14px 18px; border-radius: 6px; margin: 16px 0; color: #1e293b; display: block;";
       });
 
-      html2pdf.default().from(reportDiv).set({
-        margin: 0.4,
-        filename: 'Executive_Summary_Report.pdf',
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-      }).save().then(() => {
-        if (reportDiv.parentNode) {
-          document.body.removeChild(reportDiv);
-        }
-      }).catch(() => {
-        if (reportDiv.parentNode) {
-          document.body.removeChild(reportDiv);
-        }
-      });
+      // Allow 150ms for browser DOM layout engine to finish sizing tables and fonts before html2canvas snapshot
+      setTimeout(() => {
+        html2pdf.default().from(reportDiv).set({
+          margin: 0.4,
+          filename: 'Executive_Summary_Report.pdf',
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, x: 0, y: 0 },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        }).save().then(() => {
+          if (reportDiv.parentNode) {
+            document.body.removeChild(reportDiv);
+          }
+        }).catch(() => {
+          if (reportDiv.parentNode) {
+            document.body.removeChild(reportDiv);
+          }
+        });
+      }, 150);
     });
   };
 
