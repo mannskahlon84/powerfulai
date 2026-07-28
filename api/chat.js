@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid payload' });
   }
 
-  const callProvider = async (url, apiKey, model, customMessages = null) => {
+  const callProvider = async (url, apiKey, model, customMessages = null, timeoutMs = 6000) => {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         model: model,
         messages: customMessages || messages
       }),
-      signal: AbortSignal.timeout(25000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
     
     if (!response.ok) {
@@ -365,7 +365,11 @@ CRITICAL RULES:
   };
 
   const errors = [];
-  const requiresVision = messages.some(m => Array.isArray(m.content));
+  const requiresVision = messages.some(m => 
+    (Array.isArray(m.content) && m.content.some(c => c.type === 'image_url' || (c.image_url && c.image_url.url))) || 
+    (m.attachment && (m.attachment.isImage === true || (m.attachment.type && m.attachment.type.startsWith('image/')))) || 
+    (typeof m.content === 'string' && m.content.includes('data:image/'))
+  );
 
   try {
     // Check for Music / Song Generation Request via Modal
@@ -489,34 +493,18 @@ CRITICAL RULES:
              !data.choices[0].message.content.includes('"detail": "Not Found"');
     };
 
-    // Priority 0: Custom GPU Modal Chat & Voice LLM
-    try {
-      const chatApiBaseUrl = (process.env.CHAT_API_BASE_URL || 'https://mannskahlon84--chat-llm-voice-agent-fastapi-app.modal.run/v1').replace(/\/$/, '');
-      const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
-      console.log('Attempting Custom Modal Chat & Voice LLM:', chatApiBaseUrl);
-      const data = await callProvider(
-        `${chatApiBaseUrl}/chat/completions`,
-        modalApiKey,
-        'gpt-4o-mini'
-      );
-      if (isValidChatResponse(data)) {
-        return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
-      }
-      throw new Error("Modal returned invalid or error response");
-    } catch (e) {
-      errors.push(`Custom Modal LLM Error: ${e.message}`);
-      console.log('Custom Modal LLM fallback:', e.message);
-    }
-
+    // Priority 0: Ultra-Fast Groq LLM (0.7s average response time for text, spreadsheets, documents)
     let groqFailed = false;
     if (!requiresVision) {
       try {
         const groqApiKey = process.env.GROQ_API_KEY || ("gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw=="));
-        console.log('Attempting Groq...');
+        console.log('Attempting Groq (Priority 0)...');
         const data = await callProvider(
           'https://api.groq.com/openai/v1/chat/completions',
           groqApiKey,
-          'llama-3.1-8b-instant'
+          'llama-3.1-8b-instant',
+          null,
+          5000
         );
         if (isValidChatResponse(data)) {
           return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
@@ -531,6 +519,27 @@ CRITICAL RULES:
       console.log('Vision request detected. Skipping Groq.');
       errors.push('Groq skipped (does not support vision).');
       groqFailed = true;
+    }
+
+    // Priority 1: Custom GPU Modal Chat & Voice LLM (fast 2500ms failover)
+    try {
+      const chatApiBaseUrl = (process.env.CHAT_API_BASE_URL || 'https://mannskahlon84--chat-llm-voice-agent-fastapi-app.modal.run/v1').replace(/\/$/, '');
+      const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
+      console.log('Attempting Custom Modal Chat & Voice LLM:', chatApiBaseUrl);
+      const data = await callProvider(
+        `${chatApiBaseUrl}/chat/completions`,
+        modalApiKey,
+        'gpt-4o-mini',
+        null,
+        2500
+      );
+      if (isValidChatResponse(data)) {
+        return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+      }
+      throw new Error("Modal returned invalid or error response");
+    } catch (e) {
+      errors.push(`Custom Modal LLM Error: ${e.message}`);
+      console.log('Custom Modal LLM fallback:', e.message);
     }
 
     if (groqFailed || requiresVision) {
@@ -554,15 +563,66 @@ CRITICAL RULES:
             }
 
             try {
-              console.log(`Attempting Native Google Gemini model: ${gModel}...`);
-              const promptText = messages && messages.length > 0 ? messages.map(m => `${m.role}: ${m.content}`).join('\n') : 'Hello';
+              console.log(`Attempting Native Google Gemini multimodal model: ${gModel}...`);
+              const geminiContents = [];
+              for (const m of (messages || [])) {
+                const parts = [];
+                let role = m.role === 'assistant' ? 'model' : 'user';
+
+                if (Array.isArray(m.content)) {
+                  for (const c of m.content) {
+                    if (c.type === 'text' && c.text) {
+                      parts.push({ text: c.text });
+                    } else if (c.type === 'image_url' && c.image_url?.url) {
+                      const match = c.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
+                      if (match) {
+                        parts.push({
+                          inlineData: {
+                            mimeType: match[1],
+                            data: match[2]
+                          }
+                        });
+                      }
+                    }
+                  }
+                } else if (typeof m.content === 'string') {
+                  parts.push({ text: m.content });
+                }
+
+                if (m.attachment && m.attachment.base64) {
+                  const match = m.attachment.base64.match(/^data:([^;]+);base64,(.+)$/);
+                  if (match) {
+                    parts.push({
+                      inlineData: {
+                        mimeType: match[1] || m.attachment.type || "application/octet-stream",
+                        data: match[2]
+                      }
+                    });
+                  }
+                  if (m.attachment.textContent) {
+                    parts.push({ text: `[Attachment Data - ${m.attachment.name}]:\n${m.attachment.textContent}` });
+                  }
+                }
+
+                if (parts.length > 0) {
+                  geminiContents.push({ role, parts });
+                }
+              }
+              if (geminiContents.length === 0) {
+                geminiContents.push({ role: 'user', parts: [{ text: 'Hello' }] });
+              }
+
               const nativeRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${geminiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  contents: [{ parts: [{ text: promptText }] }]
+                  contents: geminiContents,
+                  generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 2048
+                  }
                 }),
-                signal: AbortSignal.timeout(25000)
+                signal: AbortSignal.timeout(3500)
               });
               if (nativeRes.ok) {
                 const nativeJson = await nativeRes.json();
@@ -591,7 +651,12 @@ CRITICAL RULES:
 
     try {
       const openRouterApiKey = process.env.OPENROUTER_API_KEY || atob("c2stb3ItdjEtMzgxOTNhODhmNGM2NTNlY2FmMjhmMjBmMWQ3NTFlNGI5NmFmMDVmNjBiYzdiYjIwMzVkYTFjNjY4MjAwN2I4OQ==");
-      const orModels = [
+      const orModels = requiresVision ? [
+        'google/gemini-2.0-flash-lite-preview-02-05:free',
+        'qwen/qwen-2-vl-72b-instruct:free',
+        'meta-llama/llama-3.2-11b-vision-instruct:free',
+        'openai/gpt-4o-mini'
+      ] : [
         'meta-llama/llama-3.1-8b-instruct:free',
         'google/gemini-2.0-flash-lite-preview-02-05:free',
         'qwen/qwen-2.5-7b-instruct:free',
@@ -603,7 +668,9 @@ CRITICAL RULES:
           const data = await callProvider(
             'https://openrouter.ai/api/v1/chat/completions',
             openRouterApiKey,
-            orModel
+            orModel,
+            null,
+            3500
           );
           if (isValidChatResponse(data)) {
             return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
@@ -623,49 +690,56 @@ CRITICAL RULES:
         const data = await callProvider(
           'https://api.openai.com/v1/chat/completions',
           process.env.OPENAI_API_KEY,
-          'gpt-4o-mini'
+          'gpt-4o-mini',
+          null,
+          3500
         );
         if (isValidChatResponse(data)) {
           return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
         }
       } catch (oErr) {
-        console.log("OpenAI failed:"    // Priority 4: 100% Free Open AI Chat Fallback (No API key required, unlimited)
-    const browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-    try {
-      console.log('Attempting Free Open Chat Fallback (POST Pollinations openai)...');
-      const polPostRes = await fetch('https://text.pollinations.ai/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': browserUserAgent,
-          'Accept': '*/*'
-        },
-        body: JSON.stringify({
-          messages: messages,
-          model: 'openai'
-        }),
-        signal: AbortSignal.timeout(25000)
-      });
-      if (polPostRes.ok) {
-        const textContent = await polPostRes.text();
-        if (textContent && 
-            !textContent.includes('{"detail":') && 
-            !textContent.includes('"error"') && 
-            !textContent.includes('Payment Required') && 
-            !textContent.includes('<html>') && 
-            textContent.trim().length > 0) {
-          return res.status(200).json(await handleOpenAIImageGeneration({
-            choices: [{
-              message: {
-                role: "assistant",
-                content: textContent.trim()
-              }
-            }]
-          }, messages));
-        }
+        console.log("OpenAI failed:", oErr.message);
       }
-    } catch (e1) {
-      console.log("Pollinations POST openai failed:", e1.message);
+    }
+
+    // Priority 4: 100% Free Open AI Chat Fallback (No API key required, unlimited)
+    const browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+    const pollModels = ['openai-fast', 'openai', 'default'];
+    for (const pModel of pollModels) {
+      try {
+        console.log(`Attempting Free Open Chat Fallback (POST Pollinations ${pModel})...`);
+        const polBody = pModel === 'default' ? { messages } : { messages, model: pModel };
+        const polPostRes = await fetch('https://text.pollinations.ai/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': browserUserAgent,
+            'Accept': '*/*'
+          },
+          body: JSON.stringify(polBody),
+          signal: AbortSignal.timeout(25000)
+        });
+        if (polPostRes.ok) {
+          const textContent = await polPostRes.text();
+          if (textContent && 
+              !textContent.includes('{"detail":') && 
+              !textContent.includes('"error"') && 
+              !textContent.includes('Payment Required') && 
+              !textContent.includes('<html>') && 
+              textContent.trim().length > 0) {
+            return res.status(200).json(await handleOpenAIImageGeneration({
+              choices: [{
+                message: {
+                  role: "assistant",
+                  content: textContent.trim()
+                }
+              }]
+            }, messages));
+          }
+        }
+      } catch (e1) {
+        console.log(`Pollinations POST ${pModel} failed:`, e1.message);
+      }
     }
 
     try {
@@ -739,50 +813,25 @@ CRITICAL RULES:
       console.log("Blackbox Web failed:", e3.message);
     }
 
-    const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : 'Hello';
-    const lowerMsg = lastUserMsg.toLowerCase().trim();
-    let smartReply = "Hello! I am Powerful AI, your world-class intelligent assistant. How can I help you today?";
-    
-    if (/^(hi|hello|hey|howdy|greetings|good morning|good afternoon|good evening|yo)$/i.test(lowerMsg)) {
-      smartReply = "Hello! I am doing fantastic today, thank you for checking in! I'm **Powerful AI**, your world-class intelligent assistant. What exciting project are we working on today, or how can I assist you?";
-    } else if (/^(how are you|how are you doing|whats up|hows it going)$/i.test(lowerMsg)) {
-      smartReply = "I am doing excellent today! Always ready and operating at peak performance. What would you like to build, analyze, or generate today?";
-    } else if (/^(what can you do|who are you|what are your capabilities|what is powerful ai|introduce yourself|capabilities|\/help|\?help|help)$/i.test(lowerMsg)) {
-      smartReply = "I am **Powerful AI**, an advanced AI assistant built to help you with:\n\n1. **Deep Reasoning & Code:** Writing, debugging, and explaining complex software and ideas.\n2. **Cinematic Image Generation:** Studio-quality photorealistic images (just type `create an image of...` or `/image`).\n3. **Voice & Debate:** Sharp, articulate answers and dynamic conversation.\n\nWhat would you like to explore first?";
-    } else if (/temperature|weather|qatar|qtar|doha|hot|rain|degrees|celsius|fahrenheit|humid/i.test(lowerMsg)) {
-      let location = 'Doha, Qatar';
-      const locMatch = lastUserMsg.match(/\b(?:in|at|for|of|on)\s+([a-zA-Z\s]+)(?:\?|$)/i);
-      if (locMatch && locMatch[1]) location = locMatch[1].trim();
-      let liveReport = null;
-      try {
-        const wttrRes = await fetch(`https://wttr.in/${encodeURIComponent(location)}?format=j1`, { signal: AbortSignal.timeout(3000) });
-        if (wttrRes.ok) {
-          const wJson = await wttrRes.json();
-          const curr = wJson?.current_condition?.[0];
-          if (curr) {
-            liveReport = `### ☀️ Real-Time Live Weather for **${location}**\n\n- **Current Temperature:** **${curr.temp_C}°C (${curr.temp_F}°F)**\n- **Condition:** ${curr.weatherDesc?.[0]?.value || 'Clear'}\n- **Humidity:** ${curr.humidity}%\n- **Wind Speed:** ${curr.windspeedKmph} km/h\n- **Cloud Cover:** ${curr.cloudcover}%\n\n*Live meteorological station sensor feed updated just now.*`;
-          }
-        }
-      } catch (e) {}
-      smartReply = liveReport || `### ☀️ Real-Time Live Weather for **${location}**\n\n- **Current Temperature:** **39°C (102°F)**\n- **Condition:** Haze\n- **Humidity:** 32%\n- **Wind Speed:** 14 km/h\n\n*Live meteorological station sensor feed updated just now.*`;
-    } else {
-      smartReply = `Thank you for your question: **"${lastUserMsg}"**.\n\nI am analyzing your request and ready to help. Please let me know if you would like me to dive deeper into any specific aspect!`;
-    }
-    return res.status(200).json({
+    // All LLM API providers failed to respond. Do NOT return a mock/echo placeholder!
+    return res.status(500).json({
+      error: "All AI model providers are currently unreachable.",
       choices: [{
         message: {
           role: "assistant",
-          content: smartReply
+          content: "⚠️ **AI Model Connection Failed:** Unable to reach the LLM providers at this moment. Please check your network connection or API keys and try again."
         }
       }]
     });
 
   } catch (error) {
-    return res.status(200).json({
+    console.error("API handler unexpected error:", error);
+    return res.status(500).json({
+      error: error.message,
       choices: [{
         message: {
           role: "assistant",
-          content: "Hello! I am ready to assist you. What would you like to explore today?"
+          content: "⚠️ **AI Engine Error:** The server encountered an issue processing your request. Please try again."
         }
       }]
     });
