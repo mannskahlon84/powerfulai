@@ -252,6 +252,11 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
         const lastMsgText = lastMsgObj ? lastMsgObj.content : 'Hello';
         
         try {
+          const systemPrompt = {
+            role: "system",
+            content: "You are Powerful AI. Format all answers beautifully in Markdown. CRITICAL RULE FOR PDF / WORD / EXCEL EXPORT: Our application has built-in PDF, Word, and Excel export buttons! NEVER say 'I cannot create visual files or PDFs' or 'I am a text-only model'. When the user asks to create or download a PDF, Word document, or Excel sheet, provide the beautifully formatted summary and append exactly one of these tags at the end: [EXPORT_PDF], [EXPORT_DOCX], or [EXPORT_XLSX]."
+          };
+          const messagesWithSystem = [systemPrompt, ...cleanClientMessages];
           const groqApiKey = "gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw==");
           const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -261,7 +266,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
             },
             body: JSON.stringify({
               model: "llama-3.1-8b-instant",
-              messages: cleanClientMessages
+              messages: messagesWithSystem
             })
           });
           if (groqRes.ok) {
@@ -624,19 +629,29 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               let isWord = false;
               let isExcel = false;
               
+              const prevMsg = idx > 0 ? messages[idx - 1] : null;
+              const prevText = prevMsg ? (typeof prevMsg.content === 'string' ? prevMsg.content : '') : '';
+
               if (typeof msg.content === 'string') {
                 contentString = msg.content;
-                if (contentString.includes('[EXPORT_PDF]')) {
+                if (contentString.includes('[EXPORT_PDF]') || (msg.role === 'assistant' && /\b(pdf|pdf file)\b/i.test(prevText))) {
                   isPdf = true;
-                  contentString = contentString.replace('[EXPORT_PDF]', '').trim();
+                  contentString = contentString.replace(/\[EXPORT_PDF\]/g, '')
+                    .replace(/Unfortunately, I'm a large language model.*?markdown-to-PDF converter\./gi, '')
+                    .replace(/I don't have the ability to create visual files such as PDFs directly\./gi, '')
+                    .trim();
                 }
-                if (contentString.includes('[EXPORT_DOCX]')) {
+                if (contentString.includes('[EXPORT_DOCX]') || (msg.role === 'assistant' && /\b(docx|word doc|word document)\b/i.test(prevText))) {
                   isWord = true;
-                  contentString = contentString.replace('[EXPORT_DOCX]', '').trim();
+                  contentString = contentString.replace(/\[EXPORT_DOCX\]/g, '')
+                    .replace(/Unfortunately, I'm a large language model.*?converter\./gi, '')
+                    .trim();
                 }
-                if (contentString.includes('[EXPORT_XLSX]')) {
+                if (contentString.includes('[EXPORT_XLSX]') || (msg.role === 'assistant' && /\b(xlsx|excel|spreadsheet|csv file)\b/i.test(prevText))) {
                   isExcel = true;
-                  contentString = contentString.replace('[EXPORT_XLSX]', '').trim();
+                  contentString = contentString.replace(/\[EXPORT_XLSX\]/g, '')
+                    .replace(/Unfortunately, I'm a large language model.*?converter\./gi, '')
+                    .trim();
                 }
               }
 
