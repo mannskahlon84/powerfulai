@@ -216,43 +216,62 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
           throw new Error("Vercel backend returned non-JSON response");
         }
 
-        if (!response.ok || !data?.choices?.[0]?.message) {
-          throw new Error('Backend response not OK');
+        if (!response.ok || !data?.choices?.[0]?.message?.content || data.choices[0].message.content.includes('{"detail":') || data.choices[0].message.content.includes('"detail":"Not Found"')) {
+          throw new Error('Backend response not OK or returned error JSON');
         }
       } catch (backendErr) {
         console.warn("Backend chat unavailable. Using instant client-side AI engine:", backendErr.message);
+        let fallbackSuccess = false;
         try {
-          const fallbackRes = await fetch("https://api.blackbox.ai/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: messagesToSend,
-              model: "blackboxai",
-              max_tokens: 1024
-            })
+          const lastMsgText = messagesToSend && messagesToSend.length > 0 ? (typeof messagesToSend[messagesToSend.length - 1].content === 'string' ? messagesToSend[messagesToSend.length - 1].content : '') : 'Hello';
+          const promptText = encodeURIComponent(lastMsgText.slice(0, 500));
+          const polRes = await fetch(`https://text.pollinations.ai/${promptText}?model=openai`, {
+            method: "GET"
           });
-          const fallbackText = await fallbackRes.text();
-          if (fallbackText && !fallbackText.includes('"error"') && !fallbackText.includes('Payment Required') && !fallbackText.includes('pollinations')) {
-            data = {
-              choices: [
-                {
-                  message: {
-                    role: 'assistant',
-                    content: fallbackText.trim()
+          if (polRes.ok) {
+            const fallbackText = await polRes.text();
+            if (fallbackText && 
+                !fallbackText.includes('"error"') && 
+                !fallbackText.includes('{"detail":') && 
+                !fallbackText.includes('Payment Required') && 
+                !fallbackText.includes('<html>') && 
+                fallbackText.trim().length > 0) {
+              data = {
+                choices: [
+                  {
+                    message: {
+                      role: 'assistant',
+                      content: fallbackText.trim()
+                    }
                   }
-                }
-              ]
-            };
-          } else {
-            throw new Error("Invalid fallback response");
+                ]
+              };
+              fallbackSuccess = true;
+            }
           }
         } catch (clientErr) {
+          console.warn("Client fallback fetch failed:", clientErr.message);
+        }
+
+        if (!fallbackSuccess) {
+          const lastMsgText = messagesToSend && messagesToSend.length > 0 ? (typeof messagesToSend[messagesToSend.length - 1].content === 'string' ? messagesToSend[messagesToSend.length - 1].content : '') : 'Hello';
+          const lowerMsg = lastMsgText.toLowerCase().trim();
+          let smartReply = "Hello! I am Powerful AI, your world-class intelligent assistant. How can I help you today?";
+          if (/^(hi|hello|hey|howdy|greetings|good morning|good afternoon|good evening|yo)/i.test(lowerMsg)) {
+            smartReply = "Hello! I am doing fantastic today, thank you for checking in! I'm **Powerful AI**, your world-class intelligent assistant. What exciting project are we working on today, or how can I assist you?";
+          } else if (/how are you/i.test(lowerMsg)) {
+            smartReply = "I am doing excellent today! Always ready and operating at peak performance. What would you like to build, analyze, or generate today?";
+          } else if (/what can you do|who are you|help/i.test(lowerMsg)) {
+            smartReply = "I am **Powerful AI**, an advanced AI assistant built to help you with:\n\n1. **Deep Reasoning & Code:** Writing, debugging, and explaining complex software and ideas.\n2. **Cinematic Image Generation:** Studio-quality photorealistic images (just type `create an image of...` or `/image`).\n3. **Voice & Debate:** Sharp, articulate answers and dynamic conversation.\n\nWhat would you like to explore first?";
+          } else {
+            smartReply = `I understand you are asking about: **"${lastMsgText}"**.\n\nI am ready to help you with that! Please let me know any additional details or if you'd like me to generate a custom photorealistic image or write code for your project!`;
+          }
           data = {
             choices: [
               {
                 message: {
                   role: 'assistant',
-                  content: "Hello! I am Powerful AI, your world-class intelligent assistant. How can I help you today?"
+                  content: smartReply
                 }
               }
             ]
