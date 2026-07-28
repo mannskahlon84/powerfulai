@@ -359,7 +359,7 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                messages: messagesToSend,
+                messages: cleanClientMessages,
                 model: 'blackboxai',
                 max_tokens: 1024
               })
@@ -472,6 +472,10 @@ export default function ChatScreen({ messages, onUpdateMessages }) {
           textContent += pdfText;
         } else {
           textContent += await file.text();
+        }
+
+        if (textContent.length > 12000) {
+          textContent = textContent.slice(0, 12000) + "\n...[Document Truncated for AI Summary]...";
         }
 
         setAttachedFile({

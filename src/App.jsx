@@ -51,7 +51,11 @@ function App() {
 
   // Sync chat history to localStorage and Firebase Firestore database on every turn
   useEffect(() => {
-    localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    try {
+      localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    } catch (err) {
+      console.warn("localStorage quota exceeded, skipping local sync:", err.message);
+    }
     const userId = user?.uid || user?.email || 'default_user';
     saveChatHistoryToDb(userId, chatHistory);
   }, [chatHistory, user]);
