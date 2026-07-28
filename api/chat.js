@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid payload' });
   }
 
-  const callProvider = async (url, apiKey, model) => {
+  const callProvider = async (url, apiKey, model, customMessages = null) => {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -46,9 +46,9 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: model,
-        messages: messages
+        messages: customMessages || messages
       }),
-      signal: AbortSignal.timeout(2500)
+      signal: AbortSignal.timeout(4000)
     });
     
     if (!response.ok) {
@@ -56,6 +56,116 @@ export default async function handler(req, res) {
       throw new Error(`HTTP ${response.status} - ${errorText}`);
     }
     return response.json();
+  };
+
+  // EXPERT LLM PROMPT EXPANSION ENGINE (Gemini 2.5 Flash -> Gemini 1.5 Flash -> Free Fallback -> Rule-based DSLR)
+  const expandImagePromptWithLLM = async (shortPrompt) => {
+    try {
+      const cleanInput = shortPrompt.trim();
+      const wordCount = cleanInput.split(/\s+/).length;
+      if (wordCount >= 70 && /85mm|f\/1\.8|cinematic|lighting|masterpiece/i.test(cleanInput)) {
+        return cleanInput;
+      }
+
+      console.log("✨ LLM Prompt Expansion Triggered for short prompt:", cleanInput.slice(0, 80));
+
+      const systemInstruction = `You are an expert prompt engineer for cutting-edge photorealistic AI image generators like FLUX.1, DALL-E 3, and Midjourney.
+Your task is to take a short user image prompt and rewrite it into a rich, cinematic masterpiece description of approximately 100 to 150 words.
+Include:
+- Highly specific photography and camera settings (e.g., 85mm portrait lens, f/1.8 aperture, DSLR, crisp focus, shallow cinematic depth of field)
+- Atmospheric lighting (e.g., golden hour, subtle rim lighting, soft diffused studio light, dramatic shadows)
+- Intricate textures, materials, and fine environmental details
+- Perfect color grading and realistic composition
+CRITICAL RULES:
+- Output ONLY the expanded image prompt text. Do NOT include any introductory or concluding remarks, explanations, quotes, or markdown labels.
+- Preserve the exact subject, characters, and core intent of the original user prompt without changing them.`;
+
+      const expansionMessages = [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: `Expand this image prompt into a 100-150 word photorealistic masterpiece description:\n"${cleanInput}"` }
+      ];
+
+      // Priority 1: Gemini 2.5 Flash / Gemini 1.5 Flash
+      const geminiKey = (process.env.VALID_API_KEYS || process.env.VALID_API_KEY || process.env.LIVE_API_KEY || process.env.GEMINI_API_KEY || '').split(',')[0].replace(/[\[\]"']/g, '').trim();
+      if (geminiKey) {
+        try {
+          console.log("Attempting Prompt Expansion via Gemini 2.5 Flash...");
+          const geminiRes = await callProvider(
+            'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            geminiKey,
+            'gemini-2.5-flash',
+            expansionMessages
+          );
+          if (geminiRes?.choices?.[0]?.message?.content) {
+            const expanded = geminiRes.choices[0].message.content.trim().replace(/^["']|["']$/g, '');
+            if (expanded && expanded.length > 40) {
+              console.log("✨ Expanded successfully via Gemini 2.5 Flash:", expanded.slice(0, 100) + "...");
+              return expanded;
+            }
+          }
+        } catch (geminiErr) {
+          console.log("Gemini 2.5 Flash expansion fallback:", geminiErr.message);
+          try {
+            console.log("Attempting Prompt Expansion via Gemini 1.5 Flash...");
+            const geminiRes = await callProvider(
+              'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+              geminiKey,
+              'gemini-1.5-flash',
+              expansionMessages
+            );
+            if (geminiRes?.choices?.[0]?.message?.content) {
+              const expanded = geminiRes.choices[0].message.content.trim().replace(/^["']|["']$/g, '');
+              if (expanded && expanded.length > 40) {
+                console.log("✨ Expanded successfully via Gemini 1.5 Flash:", expanded.slice(0, 100) + "...");
+                return expanded;
+              }
+            }
+          } catch (g15Err) {
+            console.log("Gemini 1.5 Flash expansion fallback:", g15Err.message);
+          }
+        }
+      }
+
+      // Priority 2: Free Blackbox AI Engine (100% Free, no API key required)
+      try {
+        console.log("Attempting Prompt Expansion via Blackbox AI...");
+        const bbRes = await fetch('https://api.blackbox.ai/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: expansionMessages,
+            model: 'blackboxai',
+            max_tokens: 400
+          })
+        });
+        if (bbRes.ok) {
+          const bbText = await bbRes.text();
+          if (bbText && !bbText.includes('"error"') && bbText.length > 40) {
+            console.log("✨ Expanded successfully via Blackbox AI:", bbText.slice(0, 100) + "...");
+            return bbText.trim().replace(/^["']|["']$/g, '');
+          }
+        }
+      } catch (bbErr) {
+        console.log("Blackbox AI expansion fallback:", bbErr.message);
+      }
+
+      // Priority 3: Local Professional DSLR Rule-Based Enhancement Fallback
+      console.log("Using Local Professional DSLR Rules for prompt expansion...");
+      let enhanced = cleanInput;
+      if (!/85mm|f\/1\.8|DSLR|lens/i.test(enhanced)) {
+        enhanced = `${enhanced}, captured with an 85mm portrait DSLR lens at f/1.8 aperture, natural soft bokeh depth of field`;
+      }
+      if (!/lighting|golden hour|rim light|studio/i.test(enhanced)) {
+        enhanced = `${enhanced}, cinematic warm lighting with subtle rim light and natural shadows`;
+      }
+      if (!/8k|masterpiece|detailed/i.test(enhanced)) {
+        enhanced = `${enhanced}, masterpiece, highly detailed textures, realistic color grading, 8k resolution`;
+      }
+      return enhanced;
+    } catch (err) {
+      console.error("LLM Prompt Expansion error:", err);
+      return `${shortPrompt}, 8k resolution, cinematic lighting, masterpiece, highly detailed`;
+    }
   };
 
   const handleOpenAIImageGeneration = async (data, messages) => {
@@ -105,18 +215,19 @@ export default async function handler(req, res) {
           detectedAspectRatio = "9:16";
         } else if (/\b(1:1|square|insta post|instagram post)\b/i.test(lastUserMsg)) {
           detectedAspectRatio = "1:1";
-        } else if (/\b(4:3|4 by 3)\b/i.test(lastUserMsg)) {
+        } else if (/\b(4:3|4 by 4)\b/i.test(lastUserMsg)) {
           detectedAspectRatio = "4:3";
         } else if (/\b(3:4|3 by 4)\b/i.test(lastUserMsg)) {
           detectedAspectRatio = "3:4";
         }
 
-        if (!/masterpiece|8k resolution/i.test(imagePrompt)) {
-          imagePrompt = `${imagePrompt}, 8k resolution, cinematic lighting, masterpiece, highly detailed`;
-        }
+        // STEP 1 & 2: AUTOMATIC EXPANSION VIA GEMINI (OR FREE FALLBACK)
+        // Transform raw short prompt into 100-150 word cinematic masterpiece description before sending to image model!
+        const expandedPrompt = await expandImagePromptWithLLM(imagePrompt);
+        console.log("Image Intercept Triggered. Raw Prompt:", imagePrompt);
+        console.log("✨ LLM Expanded Prompt:", expandedPrompt);
+        imagePrompt = expandedPrompt;
 
-        console.log("Image Intercept Triggered. Prompt:", imagePrompt, "Aspect Ratio:", detectedAspectRatio);
-        
         let imageUrl = "";
         let generatorName = "";
         const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
