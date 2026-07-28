@@ -79,29 +79,30 @@ export function useGeminiLive() {
     nextPlayTimeRef.current += audioBuffer.duration;
   }, []);
 
+  const voiceHistoryRef = useRef([]);
+  const isProcessingRef = useRef(false);
+  const recRef = useRef(null);
+
   const disconnectLive = useCallback(() => {
     if (wsRef.current) {
-      wsRef.current.close();
+      wsRef.current.active = false;
       wsRef.current = null;
     }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
+    if (recRef.current) {
+      try { recRef.current.stop(); } catch (e) {}
+      try { recRef.current.abort(); } catch (e) {}
+      recRef.current = null;
     }
-    if (audioProcessorRef.current) {
-      audioProcessorRef.current.disconnect();
-      audioProcessorRef.current = null;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
     }
-    setupCompleteRef.current = false;
+    isProcessingRef.current = false;
+    voiceHistoryRef.current = [];
     setIsLive(false);
     setStatus('Disconnected');
   }, []);
 
   const connectLive = useCallback(async () => {
-    console.log('Starting Live Voice Agent exclusively via Modal Custom AI backend (/api/chat + Web Speech Engine)...');
-    setIsLive(true);
-    setStatus('Live (Modal Custom AI Voice Agent)');
-
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setStatus('Browser Speech Recognition Not Supported in this browser');
@@ -109,125 +110,153 @@ export function useGeminiLive() {
       return;
     }
 
-    const rec = new SpeechRecognition();
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.lang = 'en-US';
+    setIsLive(true);
+    setStatus('Listening (Real-Time Voice Call)...');
+    voiceHistoryRef.current = [];
+    isProcessingRef.current = false;
+    wsRef.current = { active: true };
 
-    rec.onresult = async (event) => {
-      const lastIndex = event.results.length - 1;
-      const transcript = event.results[lastIndex][0].transcript.trim();
-      if (!transcript) return;
+    const startTurnListener = () => {
+      if (!wsRef.current || !wsRef.current.active) return;
 
-      setStatus('Thinking...');
-      let replyText = null;
-
-      // 1. Try Vercel Backend API
-      try {
-        const chatRes = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [{ role: 'user', content: transcript }],
-            model: 'default'
-          })
-        });
-        if (chatRes.ok) {
-          const chatData = await chatRes.json();
-          replyText = chatData?.choices?.[0]?.message?.content || chatData?.reply;
-        }
-      } catch (err) {
-        console.warn("Backend API Voice fallback:", err.message);
+      if (recRef.current) {
+        try { recRef.current.stop(); } catch (e) {}
       }
 
-      // 2. Client-Side Groq Fallback if backend failed
-      if (!replyText) {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+      recRef.current = rec;
+
+      rec.onresult = async (event) => {
+        const lastIndex = event.results.length - 1;
+        const transcript = event.results[lastIndex][0].transcript.trim();
+        if (!transcript || isProcessingRef.current) return;
+
+        isProcessingRef.current = true;
+        try { rec.stop(); } catch (e) {}
+
+        setStatus('Thinking...');
+        voiceHistoryRef.current.push({ role: 'user', content: transcript });
+
+        const messagesToSend = voiceHistoryRef.current.slice(-10);
+        let replyText = null;
+
+        // 1. Try Vercel Backend API
         try {
-          const groqApiKey = "gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw==");
-          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${groqApiKey}`
-            },
+          const chatRes = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model: "llama-3.1-8b-instant",
-              messages: [{ role: "user", content: `You are a helpful, concise voice AI assistant. Speak naturally in 1-3 short sentences. User says: "${transcript}"` }]
+              messages: messagesToSend,
+              model: 'default'
             })
           });
-          if (groqRes.ok) {
-            const groqJson = await groqRes.json();
-            replyText = groqJson?.choices?.[0]?.message?.content;
+          if (chatRes.ok) {
+            const chatData = await chatRes.json();
+            replyText = chatData?.choices?.[0]?.message?.content || chatData?.reply;
           }
-        } catch (groqErr) {
-          console.warn("Voice Groq fallback failed:", groqErr.message);
+        } catch (err) {
+          console.warn("Backend API Voice fallback:", err.message);
         }
-      }
 
-      // 3. Pollinations Fallback
-      if (!replyText) {
-        try {
-          const polRes = await fetch(`https://text.pollinations.ai/${encodeURIComponent(transcript)}?model=openai`);
-          if (polRes.ok) {
-            const polText = await polRes.text();
-            if (polText && !polText.includes('<html>')) {
-              replyText = polText.trim();
+        // 2. Client-Side Groq Fallback with conversational context
+        if (!replyText) {
+          try {
+            const groqApiKey = "gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw==");
+            const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${groqApiKey}`
+              },
+              body: JSON.stringify({
+                model: "llama-3.1-8b-instant",
+                messages: [
+                  { role: "system", content: "You are a helpful, concise voice AI assistant. Speak naturally in 1-3 short sentences." },
+                  ...messagesToSend
+                ]
+              })
+            });
+            if (groqRes.ok) {
+              const groqJson = await groqRes.json();
+              replyText = groqJson?.choices?.[0]?.message?.content;
             }
+          } catch (groqErr) {
+            console.warn("Voice Groq fallback failed:", groqErr.message);
           }
-        } catch (polErr) {
-          console.warn("Voice Pollinations fallback failed:", polErr.message);
         }
-      }
 
-      replyText = replyText || "I heard you, but I couldn't connect to my AI language server at the moment.";
+        // 3. Pollinations Fallback
+        if (!replyText) {
+          try {
+            const polRes = await fetch(`https://text.pollinations.ai/${encodeURIComponent(transcript)}?model=openai`);
+            if (polRes.ok) {
+              const polText = await polRes.text();
+              if (polText && !polText.includes('<html>')) {
+                replyText = polText.trim();
+              }
+            }
+          } catch (polErr) {
+            console.warn("Voice Pollinations fallback failed:", polErr.message);
+          }
+        }
 
-      setStatus('Speaking...');
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(replyText);
-        utterance.onend = () => {
-          if (wsRef.current) setStatus('Listening (Real-Time Voice Call)...');
-        };
-        utterance.onerror = () => {
-          if (wsRef.current) setStatus('Listening (Real-Time Voice Call)...');
-        };
-        window.speechSynthesis.speak(utterance);
-      } else {
-        if (wsRef.current) setStatus('Listening (Real-Time Voice Call)...');
-      }
-    };
+        replyText = replyText || "I heard you, but I couldn't connect to my AI language server at the moment.";
+        voiceHistoryRef.current.push({ role: 'assistant', content: replyText });
 
-    rec.onend = () => {
-      // Auto-restart speech recognition on browser silence timeout so microphone never stops listening
-      if (wsRef.current) {
-        try {
-          rec.start();
-        } catch (e) {}
-      }
-    };
-
-    rec.onerror = (e) => {
-      console.warn("Speech recognition error:", e.error);
-      if (e.error === 'not-allowed') {
-        setStatus('Mic Permission Denied');
-      }
-    };
-
-    try {
-      rec.start();
-      setStatus('Listening (Real-Time Voice Call)...');
-      // Store recognition object in wsRef so disconnectLive can clean it up
-      wsRef.current = {
-        close: () => {
-          try { rec.stop(); } catch (e) {}
-          if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        setStatus('Speaking...');
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(replyText);
+          utterance.onend = () => {
+            isProcessingRef.current = false;
+            if (wsRef.current && wsRef.current.active) {
+              setStatus('Listening (Real-Time Voice Call)...');
+              startTurnListener();
+            }
+          };
+          utterance.onerror = () => {
+            isProcessingRef.current = false;
+            if (wsRef.current && wsRef.current.active) {
+              setStatus('Listening (Real-Time Voice Call)...');
+              startTurnListener();
+            }
+          };
+          window.speechSynthesis.speak(utterance);
+        } else {
+          isProcessingRef.current = false;
+          if (wsRef.current && wsRef.current.active) {
+            setStatus('Listening (Real-Time Voice Call)...');
+            startTurnListener();
+          }
         }
       };
-    } catch (e) {
-      console.error("Failed to start speech recognition:", e);
-      setStatus('Microphone Error');
-      setIsLive(false);
-    }
+
+      rec.onend = () => {
+        if (wsRef.current && wsRef.current.active && !isProcessingRef.current) {
+          setTimeout(() => startTurnListener(), 250);
+        }
+      };
+
+      rec.onerror = (e) => {
+        if (e.error === 'not-allowed') {
+          setStatus('Mic Permission Denied');
+          isProcessingRef.current = false;
+        }
+      };
+
+      try {
+        rec.start();
+      } catch (e) {
+        if (wsRef.current && wsRef.current.active && !isProcessingRef.current) {
+          setTimeout(() => startTurnListener(), 500);
+        }
+      }
+    };
+
+    startTurnListener();
   }, [disconnectLive]);
 
   return { connectLive, disconnectLive, isLive, status };
