@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 // Utility to convert Float32Array from microphone to Int16Array PCM
 const floatTo16BitPCM = (input) => {
@@ -56,6 +56,10 @@ const detectLanguageCode = (text, fallbackLang = 'en-US') => {
 export function useGeminiLive() {
   const [isLive, setIsLive] = useState(false);
   const [status, setStatus] = useState('Disconnected');
+
+  useEffect(() => {
+    console.log("[VOICE DEBUG] STATE:", status);
+  }, [status]);
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -103,6 +107,7 @@ export function useGeminiLive() {
     
     source.start(nextPlayTimeRef.current);
     nextPlayTimeRef.current += audioBuffer.duration;
+    console.log("[VOICE DEBUG] AUDIO QUEUE LENGTH:", audioQueueRef.current.length);
   }, []);
 
   const voiceHistoryRef = useRef([]);
@@ -191,6 +196,7 @@ export function useGeminiLive() {
         const result = event.results[lastIndex];
         const transcript = result[0].transcript.trim();
         if (!transcript) return;
+        console.log("[VOICE DEBUG] STT RESULT:", transcript);
 
         // INSTANT BARGE-IN INTERRUPTION: The millisecond speech energy / interim transcript is detected, silence active TTS!
         if ('speechSynthesis' in window) {
@@ -440,6 +446,7 @@ export function useGeminiLive() {
                       let backendFinished = false;
                       const safeBackendEnd = () => {
                         if (!backendFinished) {
+                          console.log("[VOICE DEBUG] TTS END", Date.now());
                           backendFinished = true;
                           handleSpeechEnd();
                         }
@@ -447,6 +454,8 @@ export function useGeminiLive() {
                       source.onended = safeBackendEnd;
                       setTimeout(safeBackendEnd, Math.max((audioBuffer.duration * 1000) + 1500, 15000));
                     }
+                    console.log("[VOICE DEBUG] TTS START", Date.now());
+                    console.log("[VOICE DEBUG] AUDIO QUEUE LENGTH:", audioQueueRef.current.length);
                     source.start(0);
                   }
                 } catch (parseErr) {
@@ -488,6 +497,7 @@ export function useGeminiLive() {
             let idx = 0;
             const playNextChunk = () => {
               if (idx >= chunks.length) {
+                console.log("[VOICE DEBUG] TTS END", Date.now());
                 handleSpeechEnd();
                 return;
               }
@@ -506,6 +516,10 @@ export function useGeminiLive() {
               }
               const audio = new Audio(gUrl);
               window._activeHtmlAudio = audio;
+              if (idx === 1) {
+                console.log("[VOICE DEBUG] TTS START", Date.now());
+              }
+              console.log("[VOICE DEBUG] AUDIO QUEUE LENGTH:", chunks.length - idx);
               audio.onended = playNextChunk;
               audio.onerror = () => {
                 // If Google neural TTS URL fails, execute browser speechSynthesis fallback
@@ -538,6 +552,7 @@ export function useGeminiLive() {
       };
 
       try {
+        console.log("[VOICE DEBUG] STT START");
         rec.start();
       } catch (e) {
         if (wsRef.current && wsRef.current.active && !isProcessingRef.current) {
