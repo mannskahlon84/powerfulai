@@ -202,10 +202,15 @@ export function useGeminiLive() {
         if ('speechSynthesis' in window) {
           try { window.speechSynthesis.cancel(); } catch (e) {}
         }
+        if (window._activeBackendSources && Array.isArray(window._activeBackendSources)) {
+          window._activeBackendSources.forEach(s => { try { s.stop(0); } catch (e) {} });
+          window._activeBackendSources = [];
+        }
         if (window._activeBackendSource) {
           try { window._activeBackendSource.stop(0); } catch (e) {}
           window._activeBackendSource = null;
         }
+        nextPlayTimeRef.current = 0;
         if (window._activeHtmlAudio) {
           try {
             window._activeHtmlAudio.pause();
@@ -420,9 +425,14 @@ export function useGeminiLive() {
                     for (let i = 0; i < audioBinary.length; i++) {
                       view[i] = audioBinary.charCodeAt(i);
                     }
-                    if (window._activeBackendSource) {
-                      try { window._activeBackendSource.stop(0); } catch (e) {}
-                      window._activeBackendSource = null;
+                    if (isFirstChunk) {
+                      isFirstChunk = false;
+                      nextPlayTimeRef.current = 0;
+                      if (window._activeBackendSources && Array.isArray(window._activeBackendSources)) {
+                        window._activeBackendSources.forEach(s => { try { s.stop(0); } catch (e) {} });
+                        window._activeBackendSources = [];
+                      }
+                      console.log("[VOICE DEBUG] TTS START", Date.now());
                     }
                     if (window._activeHtmlAudio) {
                       try {
@@ -431,7 +441,10 @@ export function useGeminiLive() {
                       } catch (e) {}
                       window._activeHtmlAudio = null;
                     }
-                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (!window._sharedAudioCtx) {
+                      window._sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    const audioCtx = window._sharedAudioCtx;
                     if (audioCtx.state === 'suspended') {
                       await audioCtx.resume();
                     }
@@ -439,10 +452,20 @@ export function useGeminiLive() {
                     const source = audioCtx.createBufferSource();
                     source.buffer = audioBuffer;
                     source.connect(audioCtx.destination);
+
+                    if (!window._activeBackendSources) {
+                      window._activeBackendSources = [];
+                    }
+                    window._activeBackendSources.push(source);
                     window._activeBackendSource = source;
 
-                    if (isFirstChunk) {
-                      isFirstChunk = false;
+                    const currentTime = audioCtx.currentTime;
+                    if (nextPlayTimeRef.current < currentTime) {
+                      nextPlayTimeRef.current = currentTime;
+                    }
+
+                    const isLastChunk = (data.chunkIndex === (data.totalChunks || 1) - 1) || (data.totalChunks === undefined);
+                    if (isLastChunk) {
                       let backendFinished = false;
                       const safeBackendEnd = () => {
                         if (!backendFinished) {
@@ -452,11 +475,11 @@ export function useGeminiLive() {
                         }
                       };
                       source.onended = safeBackendEnd;
-                      setTimeout(safeBackendEnd, Math.max((audioBuffer.duration * 1000) + 1500, 15000));
                     }
-                    console.log("[VOICE DEBUG] TTS START", Date.now());
-                    console.log("[VOICE DEBUG] AUDIO QUEUE LENGTH:", audioQueueRef.current.length);
-                    source.start(0);
+
+                    console.log("[VOICE DEBUG] AUDIO QUEUE LENGTH:", (data.totalChunks || 1) - (data.chunkIndex || 0));
+                    source.start(nextPlayTimeRef.current);
+                    nextPlayTimeRef.current += audioBuffer.duration;
                   }
                 } catch (parseErr) {
                   console.warn("Streaming voice connection parse error:", parseErr.message);
