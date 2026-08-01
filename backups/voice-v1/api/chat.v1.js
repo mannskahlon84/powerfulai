@@ -40,12 +40,6 @@ export default async function handler(req, res) {
       messages = [{ role: 'user', content: 'Hello' }];
     }
 
-    const lastMessage = messages[messages.length - 1];
-    const lastUserMsg =
-      lastMessage?.role === 'user' && typeof lastMessage.content === 'string'
-        ? lastMessage.content
-        : '';
-
     const isVoiceSession = req.body?.mode === 'voice' || req.body?.isVoiceSession === true;
 
     const VOICE_TUTOR_SYSTEM_PROMPT = `You are Powerful AI Voice, an advanced real-time Indian language tutor and conversational coach—designed to function identically to native Gemini Live and ChatGPT voice features with an authentic, professional Indian accent.
@@ -419,6 +413,7 @@ CRITICAL RULES:
 
   try {
     // Check for Music / Song Generation Request via Modal
+    const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
     const isMusicRequest = /(?:WRITE_A_SONG:|MUSIC_PROMPT:|\[MUSIC_PROMPT:|\b(write|create|generate|make|compose|sing|record)\b.*\b(song|music|track|beat|melody|tune)\b)/i.test(lastUserMsg);
     if (isMusicRequest) {
       const musicPrompt = lastUserMsg.replace(/^(write a song about|create a song about|generate a song about|create song|create music)/i, '').trim() || lastUserMsg;
@@ -466,6 +461,7 @@ CRITICAL RULES:
     // DIRECT IMAGE GENERATION INTERCEPTION:
     // If the user's message is an image prompt (e.g., [IMAGE_PROMPT:...], /image, or "generate image..."),
     // bypass text LLMs entirely and execute handleOpenAIImageGeneration directly on FLUX.1!
+    const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
     const userImgMatch = lastUserMsg.match(/(?:IMAGE_PROMPT:|\[IMAGE_PROMPT:)([\s\S]*?)(?:\]|$)/i);
     const isDirectImageCmd = /^(create|generate|make|draw|show|render|cretae|generat)\b.*\b(image|picture|photo|pic|avatar|clone)\b/i.test(lastUserMsg) ||
       /@\w+/i.test(lastUserMsg) ||
@@ -791,8 +787,8 @@ CRITICAL RULES:
 
     try {
       console.log('Attempting Free Open Chat Fallback (GET Pollinations)...');
-      const fallbackUserMsg = lastUserMsg || 'Hello';
-      const promptText = encodeURIComponent(fallbackUserMsg.slice(0, 500));
+      const lastUserMsg = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : 'Hello';
+      const promptText = encodeURIComponent(lastUserMsg.slice(0, 500));
       const polGetRes = await fetch(`https://text.pollinations.ai/${promptText}?model=openai`, {
         method: 'GET',
         headers: {

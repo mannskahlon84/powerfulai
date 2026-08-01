@@ -122,12 +122,6 @@ export function useGeminiLive() {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
-    if (mediaStreamRef.current) {
-      try {
-        mediaStreamRef.current.getTracks().forEach(t => t.stop());
-      } catch (e) {}
-      mediaStreamRef.current = null;
-    }
     isProcessingRef.current = false;
     voiceHistoryRef.current = [];
     setIsLive(false);
@@ -147,30 +141,6 @@ export function useGeminiLive() {
     voiceHistoryRef.current = [];
     isProcessingRef.current = false;
     wsRef.current = { active: true };
-
-    try {
-      if (!mediaStreamRef.current && navigator?.mediaDevices?.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
-        });
-        mediaStreamRef.current = stream;
-        const audioTrack = stream.getAudioTracks()[0];
-        if (audioTrack && audioTrack.getSettings) {
-          const settings = audioTrack.getSettings();
-          console.log("🎙️ [Microphone Stream Settings Calibrated]:", {
-            echoCancellation: settings.echoCancellation ?? true,
-            noiseSuppression: settings.noiseSuppression ?? true,
-            autoGainControl: settings.autoGainControl ?? true
-          });
-        }
-      }
-    } catch (micErr) {
-      console.warn("Microphone AEC constraints warning:", micErr.message);
-    }
 
     const startTurnListener = () => {
       if (!wsRef.current || !wsRef.current.active) return;
@@ -296,12 +266,12 @@ export function useGeminiLive() {
         const targetLang = detectLanguageCode(replyText, currentLangRef.current);
         currentLangRef.current = targetLang;
 
-        // Keep microphone active during TTS playback for natural barge-in support
+        // Start listening immediately while speaking so the user can barge in and interrupt at any time!
         setTimeout(() => {
           if (wsRef.current && wsRef.current.active) {
             startTurnListener();
           }
-        }, 200);
+        }, 350);
 
         const handleSpeechEnd = () => {
           isProcessingRef.current = false;
@@ -414,17 +384,6 @@ export function useGeminiLive() {
                     for (let i = 0; i < audioBinary.length; i++) {
                       view[i] = audioBinary.charCodeAt(i);
                     }
-                    if (window._activeBackendSource) {
-                      try { window._activeBackendSource.stop(0); } catch (e) {}
-                      window._activeBackendSource = null;
-                    }
-                    if (window._activeHtmlAudio) {
-                      try {
-                        window._activeHtmlAudio.pause();
-                        window._activeHtmlAudio.currentTime = 0;
-                      } catch (e) {}
-                      window._activeHtmlAudio = null;
-                    }
                     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                     if (audioCtx.state === 'suspended') {
                       await audioCtx.resume();
@@ -497,13 +456,6 @@ export function useGeminiLive() {
                 return;
               }
               const gUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(langCode)}&q=${encodeURIComponent(chunkText)}`;
-              if (window._activeHtmlAudio) {
-                try {
-                  window._activeHtmlAudio.pause();
-                  window._activeHtmlAudio.currentTime = 0;
-                } catch (e) {}
-                window._activeHtmlAudio = null;
-              }
               const audio = new Audio(gUrl);
               window._activeHtmlAudio = audio;
               audio.onended = playNextChunk;

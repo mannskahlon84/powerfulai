@@ -71,10 +71,14 @@ function App() {
   const handleUpdateMessages = (newMessages) => {
     const updatedHistory = chatHistory.map(chat => {
       if (chat.id === activeChatId) {
-        // Simple title generator based on first message
-        const title = chat.title === 'New Chat' && newMessages.length > 0 
-          ? newMessages[0].content.substring(0, 30) + '...' 
-          : chat.title;
+        let title = chat.title;
+        if (chat.title === 'New Chat' && newMessages.length > 0) {
+          const firstContent = newMessages[0]?.content;
+          const firstText = Array.isArray(firstContent)
+            ? (firstContent.find(c => c.type === 'text')?.text || 'New Chat')
+            : String(firstContent || 'New Chat');
+          title = firstText.substring(0, 30) + (firstText.length > 30 ? '...' : '');
+        }
         return { ...chat, title, messages: newMessages };
       }
       return chat;

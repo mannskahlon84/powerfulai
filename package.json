@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "compromise": "^14.16.0",
     "firebase": "^12.16.0",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^1.25.0",
     "mammoth": "^1.12.0",
+    "natural": "^8.1.1",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
