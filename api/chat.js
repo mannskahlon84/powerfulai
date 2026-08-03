@@ -655,7 +655,11 @@ CRITICAL RULES:
                 }
 
                 if (parts.length > 0) {
-                  geminiContents.push({ role, parts });
+                  if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === role) {
+                    geminiContents[geminiContents.length - 1].parts.push(...parts);
+                  } else {
+                    geminiContents.push({ role, parts });
+                  }
                 }
               }
               if (geminiContents.length === 0) {
@@ -867,24 +871,31 @@ CRITICAL RULES:
     }
 
     // All LLM API providers failed to respond. Do NOT return a mock/echo placeholder!
+    const errType = errors && errors.length > 0 ? errors.map(e => String(e).split(':')[0]).join('->') : 'AllProvidersUnreachable';
+    console.error(`[VOICE DEBUG] CHAT ERROR: ${errType}`);
     return res.status(500).json({
       error: "All AI model providers are currently unreachable.",
       choices: [{
         message: {
           role: "assistant",
-          content: "⚠️ **AI Model Connection Failed:** Unable to reach the LLM providers at this moment. Please check your network connection or API keys and try again."
+          content: process.env.NODE_ENV === 'development'
+            ? `⚠️ **Dev Error Details (${errType}):** ${errors.join(' | ')}`
+            : "⚠️ **AI Model Connection Failed:** Unable to reach the LLM providers at this moment. Please check your network connection or API keys and try again."
         }
       }]
     });
 
   } catch (error) {
-    console.error("API handler unexpected error:", error);
+    const errorType = error.name || "UnexpectedError";
+    console.error(`[VOICE DEBUG] CHAT ERROR: ${errorType}`);
     return res.status(500).json({
       error: error.message,
       choices: [{
         message: {
           role: "assistant",
-          content: "⚠️ **AI Engine Error:** The server encountered an issue processing your request. Please try again."
+          content: process.env.NODE_ENV === 'development'
+            ? `⚠️ **AI Engine Error (${errorType}):** ${error.message}`
+            : "⚠️ **AI Engine Error:** The server encountered an issue processing your request. Please try again."
         }
       }]
     });

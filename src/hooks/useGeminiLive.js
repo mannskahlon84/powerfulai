@@ -115,6 +115,7 @@ export function useGeminiLive() {
   const recRef = useRef(null);
   const isAiSpeakingRef = useRef(false);
   const lastAiResponseTextRef = useRef('');
+  const lastTtsEndTimeRef = useRef(0);
   const isLiveRef = useRef(false);
 
   const disconnectLive = useCallback(() => {
@@ -239,6 +240,13 @@ export function useGeminiLive() {
           const matchRatio = sttWords.length > 0 ? matchingWords.length / sttWords.length : 0;
           if (matchRatio >= 0.5 || (cleanTranscript.length > 0 && aiText.includes(cleanTranscript))) {
             console.log("[VOICE DEBUG] STT IGNORED WHILE SPEAKING");
+            return;
+          }
+        } else {
+          // Post-TTS echo cooldown (ignore residual acoustic tail for ~1200ms after TTS END)
+          const now = Date.now();
+          if ((now - lastTtsEndTimeRef.current) < 1200) {
+            console.log("[VOICE DEBUG] STT IGNORED DURING ECHO COOLDOWN");
             return;
           }
         }
@@ -366,6 +374,8 @@ export function useGeminiLive() {
         }, 200);
 
         const handleSpeechEnd = () => {
+          console.log("[VOICE DEBUG] TTS END", Date.now());
+          lastTtsEndTimeRef.current = Date.now();
           isProcessingRef.current = false;
           isAiSpeakingRef.current = false;
           if (isLiveRef.current && wsRef.current && wsRef.current.active) {
@@ -522,7 +532,6 @@ export function useGeminiLive() {
                       let backendFinished = false;
                       const safeBackendEnd = () => {
                         if (!backendFinished) {
-                          console.log("[VOICE DEBUG] TTS END", Date.now());
                           backendFinished = true;
                           handleSpeechEnd();
                         }
@@ -557,7 +566,7 @@ export function useGeminiLive() {
             } else {
               langCode = langCode.split('-')[0];
             }
-            const sentences = replyText.match(/[^.!?,\r\n]+[.!?,\r\n]*/g) || [replyText];
+            const sentences = replyText.match(/[^.!?\r\n]+[.!?\r\n]*/g) || [replyText];
             const chunks = [];
             let currentChunk = '';
             for (const s of sentences) {
@@ -573,7 +582,6 @@ export function useGeminiLive() {
             let idx = 0;
             const playNextChunk = () => {
               if (idx >= chunks.length) {
-                console.log("[VOICE DEBUG] TTS END", Date.now());
                 handleSpeechEnd();
                 return;
               }

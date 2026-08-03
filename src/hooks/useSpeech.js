@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export function useSpeech() {
   const [voices, setVoices] = useState([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const lastTtsEndTimeRef = useRef(0);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -34,10 +35,14 @@ export function useSpeech() {
       
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => {
+        lastTtsEndTimeRef.current = Date.now();
         setIsSpeaking(false);
         if (onEndCallback) onEndCallback();
       };
-      utterance.onerror = () => setIsSpeaking(false);
+      utterance.onerror = () => {
+        lastTtsEndTimeRef.current = Date.now();
+        setIsSpeaking(false);
+      };
       
       window.speechSynthesis.speak(utterance);
     }
@@ -62,6 +67,10 @@ export function useSpeech() {
       finalTranscript = event.results[0][0].transcript;
       if (isSpeaking) {
         console.log("[VOICE DEBUG] STT IGNORED WHILE SPEAKING");
+        return;
+      }
+      if ((Date.now() - lastTtsEndTimeRef.current) < 1200) {
+        console.log("[VOICE DEBUG] STT IGNORED DURING ECHO COOLDOWN");
         return;
       }
       onResult((prev) => prev ? prev + ' ' + finalTranscript : finalTranscript);
