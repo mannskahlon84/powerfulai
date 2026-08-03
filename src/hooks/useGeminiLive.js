@@ -113,20 +113,44 @@ export function useGeminiLive() {
   const voiceHistoryRef = useRef([]);
   const isProcessingRef = useRef(false);
   const recRef = useRef(null);
+  const isAiSpeakingRef = useRef(false);
+  const lastAiResponseTextRef = useRef('');
+  const isLiveRef = useRef(false);
 
   const disconnectLive = useCallback(() => {
+    isLiveRef.current = false;
     if (wsRef.current) {
       wsRef.current.active = false;
       wsRef.current = null;
     }
     if (recRef.current) {
+      recRef.current.onend = null;
+      recRef.current.onerror = null;
+      recRef.current.onresult = null;
       try { recRef.current.stop(); } catch (e) {}
       try { recRef.current.abort(); } catch (e) {}
       recRef.current = null;
     }
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      try { window.speechSynthesis.cancel(); } catch (e) {}
     }
+    if (window._activeBackendSources && Array.isArray(window._activeBackendSources)) {
+      window._activeBackendSources.forEach(s => { try { s.stop(0); } catch (e) {} });
+      window._activeBackendSources = [];
+    }
+    if (window._activeBackendSource) {
+      try { window._activeBackendSource.stop(0); } catch (e) {}
+      window._activeBackendSource = null;
+    }
+    if (window._activeHtmlAudio) {
+      try {
+        window._activeHtmlAudio.pause();
+        window._activeHtmlAudio.currentTime = 0;
+      } catch (e) {}
+      window._activeHtmlAudio = null;
+    }
+    audioQueueRef.current = [];
+    nextPlayTimeRef.current = 0;
     if (mediaStreamRef.current) {
       try {
         mediaStreamRef.current.getTracks().forEach(t => t.stop());
@@ -134,9 +158,11 @@ export function useGeminiLive() {
       mediaStreamRef.current = null;
     }
     isProcessingRef.current = false;
+    isAiSpeakingRef.current = false;
     voiceHistoryRef.current = [];
     setIsLive(false);
     setStatus('Disconnected');
+    console.log("[VOICE DEBUG] VOICE SESSION STOPPED");
   }, []);
 
   const connectLive = useCallback(async () => {
@@ -148,9 +174,11 @@ export function useGeminiLive() {
     }
 
     setIsLive(true);
+    isLiveRef.current = true;
     setStatus('Listening (Real-Time Voice Call)...');
     voiceHistoryRef.current = [];
     isProcessingRef.current = false;
+    isAiSpeakingRef.current = false;
     wsRef.current = { active: true };
 
     try {
@@ -178,10 +206,14 @@ export function useGeminiLive() {
     }
 
     const startTurnListener = () => {
-      if (!wsRef.current || !wsRef.current.active) return;
+      if (!isLiveRef.current || !wsRef.current || !wsRef.current.active) return;
 
       if (recRef.current) {
+        recRef.current.onend = null;
+        recRef.current.onerror = null;
+        recRef.current.onresult = null;
         try { recRef.current.stop(); } catch (e) {}
+        recRef.current = null;
       }
 
       // Replace batch Browser SpeechRecognition with Streaming STT (continuous streaming & instant interim results)
@@ -192,11 +224,27 @@ export function useGeminiLive() {
       recRef.current = rec;
 
       rec.onresult = async (event) => {
+        if (!isLiveRef.current) return;
         const lastIndex = event.results.length - 1;
         const result = event.results[lastIndex];
         const transcript = result[0].transcript.trim();
         if (!transcript) return;
+
+        if (isAiSpeakingRef.current) {
+          const aiText = (lastAiResponseTextRef.current || '').toLowerCase().replace(/[^a-z0-9\u0900-\u097f\u0a00-\u0a7f]/gi, '');
+          const cleanTranscript = transcript.toLowerCase().replace(/[^a-z0-9\u0900-\u097f\u0a00-\u0a7f]/gi, '');
+          const aiWords = (lastAiResponseTextRef.current || '').toLowerCase().split(/\s+/).filter(Boolean);
+          const sttWords = transcript.toLowerCase().split(/\s+/).filter(Boolean);
+          const matchingWords = sttWords.filter(w => aiWords.includes(w));
+          const matchRatio = sttWords.length > 0 ? matchingWords.length / sttWords.length : 0;
+          if (matchRatio >= 0.5 || (cleanTranscript.length > 0 && aiText.includes(cleanTranscript))) {
+            console.log("[VOICE DEBUG] STT IGNORED WHILE SPEAKING");
+            return;
+          }
+        }
+
         console.log("[VOICE DEBUG] STT RESULT:", transcript);
+        isAiSpeakingRef.current = false;
 
         // INSTANT BARGE-IN INTERRUPTION: The millisecond speech energy / interim transcript is detected, silence active TTS!
         if ('speechSynthesis' in window) {
@@ -301,22 +349,26 @@ export function useGeminiLive() {
         }
 
         replyText = replyText || "I heard you, but I couldn't connect to my AI language server at the moment.";
+        if (!isLiveRef.current) return;
         voiceHistoryRef.current.push({ role: 'assistant', content: replyText });
 
         setStatus('Speaking (Listening for barge-in)...');
+        isAiSpeakingRef.current = true;
+        lastAiResponseTextRef.current = replyText;
         const targetLang = detectLanguageCode(replyText, currentLangRef.current);
         currentLangRef.current = targetLang;
 
         // Keep microphone active during TTS playback for natural barge-in support
         setTimeout(() => {
-          if (wsRef.current && wsRef.current.active) {
+          if (isLiveRef.current && wsRef.current && wsRef.current.active) {
             startTurnListener();
           }
         }, 200);
 
         const handleSpeechEnd = () => {
           isProcessingRef.current = false;
-          if (wsRef.current && wsRef.current.active) {
+          isAiSpeakingRef.current = false;
+          if (isLiveRef.current && wsRef.current && wsRef.current.active) {
             setStatus('Listening (Real-Time Voice Call)...');
           }
         };
@@ -374,6 +426,7 @@ export function useGeminiLive() {
 
             utterance.onend = safeEnd;
             utterance.onerror = safeEnd;
+            console.log("[VOICE DEBUG] TTS START", Date.now());
             window.speechSynthesis.speak(utterance);
 
             // Safety watchdog: ensure speech loop never hangs indefinitely
@@ -562,8 +615,10 @@ export function useGeminiLive() {
       };
 
       rec.onend = () => {
-        if (wsRef.current && wsRef.current.active && !isProcessingRef.current) {
-          setTimeout(() => startTurnListener(), 250);
+        if (isLiveRef.current && wsRef.current && wsRef.current.active && !isProcessingRef.current) {
+          setTimeout(() => {
+            if (isLiveRef.current) startTurnListener();
+          }, 250);
         }
       };
 
@@ -575,11 +630,14 @@ export function useGeminiLive() {
       };
 
       try {
+        if (!isLiveRef.current) return;
         console.log("[VOICE DEBUG] STT START");
         rec.start();
       } catch (e) {
-        if (wsRef.current && wsRef.current.active && !isProcessingRef.current) {
-          setTimeout(() => startTurnListener(), 500);
+        if (isLiveRef.current && wsRef.current && wsRef.current.active && !isProcessingRef.current) {
+          setTimeout(() => {
+            if (isLiveRef.current) startTurnListener();
+          }, 500);
         }
       }
     };

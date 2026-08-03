@@ -3,6 +3,7 @@ import {
   MemoryAugmentedContextModule,
   EmotionalIntelligenceModule,
   SelfSupervisedTrainingLoop,
+  DIALOGUE_STATES,
 } from './utils/languageModelEngine.js';
 import { routeAndGenerateImage } from './utils/imageModelRouter.js';
 
@@ -19,8 +20,8 @@ export default async function handler(req, res) {
 
   let messages;
   try {
-    // Vercel parses JSON bodies automatically
-    messages = req.body.messages || [];
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    messages = Array.isArray(body.messages) ? body.messages : [];
     
     // Sanitize messages
     messages = messages.filter(m => {
@@ -135,7 +136,12 @@ CRITICAL VOICE & TUTOR CAPABILITIES:
     };
     
     messages = [systemPrompt, ...messages];
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log("[VOICE DEBUG] CHAT PAYLOAD VALIDATED");
+    }
   } catch (e) {
+    console.error("Payload validation error:", e);
     return res.status(400).json({ error: 'Invalid payload' });
   }
 

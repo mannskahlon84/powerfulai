@@ -60,6 +60,10 @@ export function useSpeech() {
     
     recognition.onresult = (event) => {
       finalTranscript = event.results[0][0].transcript;
+      if (isSpeaking) {
+        console.log("[VOICE DEBUG] STT IGNORED WHILE SPEAKING");
+        return;
+      }
       onResult((prev) => prev ? prev + ' ' + finalTranscript : finalTranscript);
     };
     
