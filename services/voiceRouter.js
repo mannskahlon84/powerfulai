@@ -49,6 +49,21 @@ function normalizeLanguage(language = 'en-US') {
  * @returns {{ language: string, provider: string, fallbackProvider: string, reason: string }}
  */
 export function selectVoiceProvider(input = {}) {
+  let language;
+  if (typeof input === 'string') {
+    language = input;
+  } else if (input && typeof input === 'object') {
+    language = input.language;
+  }
+  const normalizedLang = normalizeLanguage(language || 'en-US');
+  console.log("[VOICE DEBUG] VOICE ROUTER LANGUAGE:", normalizedLang);
+  const decision = _selectVoiceProviderInternal(input, normalizedLang);
+  console.log("[VOICE DEBUG] PROVIDER SELECTED:", decision.provider);
+  console.log("[VOICE DEBUG] PROVIDER:", decision.provider);
+  return decision;
+}
+
+function _selectVoiceProviderInternal(input = {}, normalizedLang) {
   let language, emotion, style, useCase;
 
   if (typeof input === 'string') {
@@ -60,7 +75,6 @@ export function selectVoiceProvider(input = {}) {
     useCase = input.useCase;
   }
 
-  const normalizedLang = normalizeLanguage(language || 'en-US');
   const isIndic = (normalizedLang === 'hi' || normalizedLang === 'pa');
   const isArabic = (normalizedLang === 'ar');
   const isKnown = SUPPORTED_LANGUAGES.includes(normalizedLang);

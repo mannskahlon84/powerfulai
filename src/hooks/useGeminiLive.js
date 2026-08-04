@@ -116,7 +116,35 @@ export function useGeminiLive() {
   const isAiSpeakingRef = useRef(false);
   const lastAiResponseTextRef = useRef('');
   const lastTtsEndTimeRef = useRef(0);
+  const isEchoProtectionRef = useRef(false);
+  const isWaitingForUserVoiceRef = useRef(false);
+  const analyserRef = useRef(null);
   const isLiveRef = useRef(false);
+
+  const getMicAmplitude = useCallback(() => {
+    try {
+      if (!mediaStreamRef.current) return 0;
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      }
+      if (!analyserRef.current) {
+        const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+        const analyser = audioContextRef.current.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+      }
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i];
+      }
+      return sum / dataArray.length;
+    } catch (e) {
+      return 0;
+    }
+  }, []);
 
   const disconnectLive = useCallback(() => {
     isLiveRef.current = false;
@@ -160,6 +188,9 @@ export function useGeminiLive() {
     }
     isProcessingRef.current = false;
     isAiSpeakingRef.current = false;
+    isEchoProtectionRef.current = false;
+    isWaitingForUserVoiceRef.current = false;
+    analyserRef.current = null;
     voiceHistoryRef.current = [];
     setIsLive(false);
     setStatus('Disconnected');
@@ -176,10 +207,12 @@ export function useGeminiLive() {
 
     setIsLive(true);
     isLiveRef.current = true;
-    setStatus('Listening (Real-Time Voice Call)...');
+    setStatus('LISTENING');
     voiceHistoryRef.current = [];
     isProcessingRef.current = false;
     isAiSpeakingRef.current = false;
+    isEchoProtectionRef.current = false;
+    isWaitingForUserVoiceRef.current = false;
     wsRef.current = { active: true };
 
     try {
@@ -188,7 +221,7 @@ export function useGeminiLive() {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: true
+            autoGainControl: false // Disable AGC so distant/unclear background voices are not amplified
           }
         });
         mediaStreamRef.current = stream;
@@ -198,7 +231,7 @@ export function useGeminiLive() {
           console.log("🎙️ [Microphone Stream Settings Calibrated]:", {
             echoCancellation: settings.echoCancellation ?? true,
             noiseSuppression: settings.noiseSuppression ?? true,
-            autoGainControl: settings.autoGainControl ?? true
+            autoGainControl: settings.autoGainControl ?? false
           });
         }
       }
@@ -231,6 +264,16 @@ export function useGeminiLive() {
         const transcript = result[0].transcript.trim();
         if (!transcript) return;
 
+        if (isEchoProtectionRef.current) {
+          console.log("[VOICE DEBUG] STT IGNORED DURING ECHO_PROTECTION");
+          return;
+        }
+
+        if (isWaitingForUserVoiceRef.current) {
+          console.log("[VOICE DEBUG] STT IGNORED DURING WAIT_FOR_USER_VOICE");
+          return;
+        }
+
         if (isAiSpeakingRef.current) {
           const aiText = (lastAiResponseTextRef.current || '').toLowerCase().replace(/[^a-z0-9\u0900-\u097f\u0a00-\u0a7f]/gi, '');
           const cleanTranscript = transcript.toLowerCase().replace(/[^a-z0-9\u0900-\u097f\u0a00-\u0a7f]/gi, '');
@@ -243,10 +286,10 @@ export function useGeminiLive() {
             return;
           }
         } else {
-          // Post-TTS echo cooldown (ignore residual acoustic tail for ~1200ms after TTS END)
+          // Additional safety fallback for residual acoustic tail right after echo protection ends
           const now = Date.now();
-          if ((now - lastTtsEndTimeRef.current) < 1200) {
-            console.log("[VOICE DEBUG] STT IGNORED DURING ECHO COOLDOWN");
+          if ((now - lastTtsEndTimeRef.current) < 250) {
+            console.log("[VOICE DEBUG] STT IGNORED DURING ECHO_PROTECTION");
             return;
           }
         }
@@ -281,8 +324,10 @@ export function useGeminiLive() {
           return;
         }
 
-        const detectedUserLang = detectLanguageCode(transcript, currentLangRef.current);
+        console.log("[VOICE DEBUG] STT FINAL TEXT:", transcript);
+        const detectedUserLang = detectLanguageCode(transcript, 'en-US');
         currentLangRef.current = detectedUserLang;
+        console.log("[VOICE DEBUG] DETECTED LANGUAGE:", detectedUserLang);
 
         isProcessingRef.current = true;
         try { rec.stop(); } catch (e) {}
@@ -295,6 +340,7 @@ export function useGeminiLive() {
 
         // 1. Try Vercel Backend API
         try {
+          console.log("[VOICE DEBUG] CHAT REQUEST LANGUAGE:", detectedUserLang);
           const chatRes = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -302,7 +348,8 @@ export function useGeminiLive() {
               messages: messagesToSend,
               model: 'default',
               mode: 'voice',
-              isVoiceSession: true
+              isVoiceSession: true,
+              lang: detectedUserLang
             })
           });
           if (chatRes.ok) {
@@ -360,7 +407,7 @@ export function useGeminiLive() {
         if (!isLiveRef.current) return;
         voiceHistoryRef.current.push({ role: 'assistant', content: replyText });
 
-        setStatus('Speaking (Listening for barge-in)...');
+        setStatus('SPEAKING');
         isAiSpeakingRef.current = true;
         lastAiResponseTextRef.current = replyText;
         const targetLang = detectLanguageCode(replyText, currentLangRef.current);
@@ -378,9 +425,47 @@ export function useGeminiLive() {
           lastTtsEndTimeRef.current = Date.now();
           isProcessingRef.current = false;
           isAiSpeakingRef.current = false;
+          isEchoProtectionRef.current = true;
           if (isLiveRef.current && wsRef.current && wsRef.current.active) {
-            setStatus('Listening (Real-Time Voice Call)...');
+            setStatus('ECHO_PROTECTION');
           }
+
+          // Stage 2: ECHO_PROTECTION lasts 900ms to ignore acoustic tail & buffered TTS transcripts
+          setTimeout(() => {
+            if (!isLiveRef.current) return;
+            isEchoProtectionRef.current = false;
+            console.log("[VOICE DEBUG] ECHO PROTECTION COMPLETE");
+
+            // Stage 3: WAIT_FOR_USER_VOICE - wait until microphone input is quiet before listening
+            isWaitingForUserVoiceRef.current = true;
+            if (isLiveRef.current && wsRef.current && wsRef.current.active) {
+              setStatus('WAIT_FOR_USER_VOICE');
+            }
+
+            const startWaitTime = Date.now();
+            let quietCount = 0;
+            const checkMicReady = () => {
+              if (!isLiveRef.current || !isWaitingForUserVoiceRef.current) return;
+              const elapsed = Date.now() - startWaitTime;
+              const amp = getMicAmplitude();
+              if (amp < 12) {
+                quietCount++;
+              } else {
+                quietCount = 0;
+              }
+              // Quiet for 2 consecutive checks (~200ms) OR safety timeout of 2000ms
+              if (quietCount >= 2 || elapsed >= 2000) {
+                isWaitingForUserVoiceRef.current = false;
+                console.log("[VOICE DEBUG] MICROPHONE READY");
+                if (isLiveRef.current && wsRef.current && wsRef.current.active) {
+                  setStatus('LISTENING');
+                }
+              } else {
+                setTimeout(checkMicReady, 100);
+              }
+            };
+            setTimeout(checkMicReady, 100);
+          }, 900);
         };
 
         // Helper for Calibrated Indic & Multilingual Browser TTS Fallback

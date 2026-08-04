@@ -1,4 +1,5 @@
-import { VoiceRouter } from '../services/voiceRouter.js';
+import { selectVoiceProvider } from '../services/voiceRouter.js';
+import { synthesizeVoice } from '../services/voiceSynthesizer.js';
 
 /**
  * Text-to-Speech API Endpoint (/api/tts)
@@ -12,16 +13,27 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { text, lang = 'en-US', personality = {} } = req.body;
+    const { text, lang = 'en-US', personality = {}, emotion = 'neutral', style = 'conversation', useCase = 'assistant' } = req.body;
+    console.log("[VOICE DEBUG] TTS LANGUAGE RECEIVED:", lang);
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'Text is required for TTS synthesis' });
     }
 
-    const synthesisResult = await VoiceRouter.synthesizeSpeech({
+    const voiceDecision = selectVoiceProvider({
+      language: lang,
+      style,
+      emotion,
+      useCase
+    });
+
+    const synthesisResult = await synthesizeVoice({
       text,
-      lang,
-      personality
+      language: lang,
+      provider: voiceDecision.provider,
+      fallbackProvider: voiceDecision.fallbackProvider,
+      emotion,
+      style
     });
 
     return res.status(200).json(synthesisResult);

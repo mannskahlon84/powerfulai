@@ -24,6 +24,8 @@ export default async function handler(req, res) {
   useCase = 'assistant'
 } = req.body;
 
+    console.log("[VOICE DEBUG] TTS LANGUAGE RECEIVED:", lang);
+
     if (!rawText || typeof rawText !== 'string') {
       return res.status(400).json({ error: 'Text is required for streaming voice connection' });
     }
