@@ -1,0 +1,26 @@
+{
+  "user_interactions": [
+    {
+      "id": "inter_1785844570789_t1qny",
+      "userId": "default_user",
+      "sessionId": "session_default",
+      "prompt": "hi how are you",
+      "response": "Hi, I'm doing well, thanks. How can I help you today?",
+      "mode": "voice",
+      "language": "en",
+      "timestamp": "2026-08-04T11:56:10.789Z"
+    },
+    {
+      "id": "inter_1785844933173_29ecr",
+      "userId": "default_user",
+      "sessionId": "session_default",
+      "prompt": "hi how are you",
+      "response": "Namaste. I'm doing great, thank you for asking.",
+      "mode": "voice",
+      "language": "en",
+      "timestamp": "2026-08-04T12:02:13.174Z"
+    }
+  ],
+  "feedback_logs": [],
+  "user_learning_profile": {}
+}
