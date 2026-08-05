@@ -577,333 +577,159 @@ CRITICAL RULES:
     console.log("[VOICE DEBUG] lastUserMsg value:", lastUserMsg);
     console.log("[VOICE DEBUG] MODEL REQUEST START");
     try {
-      // Priority 0: Ultra-Fast Groq LLM (0.7s average response time for text, spreadsheets, documents)
-      let groqFailed = false;
-    if (!requiresVision) {
-      try {
-        const groqApiKey = process.env.GROQ_API_KEY || ("gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw=="));
-        console.log('Attempting Groq (Priority 0)...');
-        const data = await callProvider(
-          'https://api.groq.com/openai/v1/chat/completions',
-          groqApiKey,
-          'llama-3.1-8b-instant',
-          null,
-          5000
-        );
-        if (isValidChatResponse(data)) {
-          return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
-        }
-        throw new Error("Groq returned invalid response");
-      } catch (e) {
-        errors.push(`Groq Error: ${e.message}`);
-        console.log('Groq failed:', e.message);
-        groqFailed = true;
-      }
-    } else {
-      console.log('Vision request detected. Skipping Groq.');
-      errors.push('Groq skipped (does not support vision).');
-      groqFailed = true;
-    }
+            // AI Provider Fallback Chain: Groq -> Gemini -> OpenAI -> Pollinations(last)
+      const browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+      const groqApiKey = process.env.GROQ_API_KEY || ("gsk_" + atob("VGExS2RZT1V0dU9jOGVFekxYcmRXR2R5YjNGWXhpNm5pYlQ4Y0x3TzRKeVpqZzA0aXBtQw=="));
+      const geminiKey = (process.env.VALID_API_KEYS || process.env.VALID_API_KEY || process.env.LIVE_API_KEY || process.env.GEMINI_API_KEY || atob("QVEuQWI4Uk42TDc3bVNjS0RhU2ZhSi1XN0hoaGVsdVJEREdMNFFQZFVlWWtIR3ZhWV91cHc=")).split(',')[0].replace(/[\[\]"']/g, '').trim();
 
-    // Priority 1: Custom GPU Modal Chat & Voice LLM (fast 2500ms failover)
-    try {
-      const chatApiBaseUrl = (process.env.CHAT_API_BASE_URL || 'https://mannskahlon84--chat-llm-voice-agent-fastapi-app.modal.run/v1').replace(/\/$/, '');
-      const modalApiKey = (process.env.MODAL_API_KEY || 'sk-my-custom-ai-key-2026').trim();
-      console.log('Attempting Custom Modal Chat & Voice LLM:', chatApiBaseUrl);
-      const data = await callProvider(
-        `${chatApiBaseUrl}/chat/completions`,
-        modalApiKey,
-        'gpt-4o-mini',
-        null,
-        2500
-      );
-      if (isValidChatResponse(data)) {
-        return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
-      }
-      throw new Error("Modal returned invalid or error response");
-    } catch (e) {
-      errors.push(`Custom Modal LLM Error: ${e.message}`);
-      console.log('Custom Modal LLM fallback:', e.message);
-    }
-
-    if (groqFailed || requiresVision) {
-      try {
-        const geminiKey = (process.env.VALID_API_KEYS || process.env.VALID_API_KEY || process.env.LIVE_API_KEY || process.env.GEMINI_API_KEY || atob("QVEuQWI4Uk42TDc3bVNjS0RhU2ZhSi1XN0hoaGVsdVJEREdMNFFQZFVlWWtIR3ZhWV91cHc=")).split(',')[0].replace(/[\[\]"']/g, '').trim();
-        if (geminiKey) {
-          const geminiModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
-          for (const gModel of geminiModels) {
-            try {
-              console.log(`Attempting Gemini model: ${gModel}...`);
-              const data = await callProvider(
-                'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-                geminiKey,
-                gModel
-              );
-              if (isValidChatResponse(data)) {
-                return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+      const providers = [
+        {
+          name: 'Groq',
+          skip: requiresVision,
+          run: async () => {
+            console.log('Attempting Groq (Priority 0)...');
+            return await callProvider('https://api.groq.com/openai/v1/chat/completions', groqApiKey, 'llama-3.1-8b-instant', null, 5000);
+          }
+        },
+        {
+          name: 'Gemini',
+          skip: !geminiKey,
+          run: async () => {
+            const geminiModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+            let lastErr = null;
+            for (const gModel of geminiModels) {
+              try {
+                console.log(`Attempting Gemini model: ${gModel}...`);
+                const data = await callProvider('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', geminiKey, gModel);
+                if (isValidChatResponse(data)) return data;
+              } catch (gErr) {
+                console.log(`Gemini ${gModel} OpenAI wrapper failed:`, gErr.message);
+                lastErr = gErr;
               }
-            } catch (gErr) {
-              console.log(`Gemini ${gModel} OpenAI wrapper failed:`, gErr.message);
-            }
-
-            try {
-              console.log(`Attempting Native Google Gemini multimodal model: ${gModel}...`);
-              const geminiContents = [];
-              for (const m of (messages || [])) {
-                const parts = [];
-                let role = m.role === 'assistant' ? 'model' : 'user';
-
-                if (Array.isArray(m.content)) {
-                  for (const c of m.content) {
-                    if (c.type === 'text' && c.text) {
-                      parts.push({ text: c.text });
-                    } else if (c.type === 'image_url' && c.image_url?.url) {
-                      const match = c.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
-                      if (match) {
-                        parts.push({
-                          inlineData: {
-                            mimeType: match[1],
-                            data: match[2]
-                          }
-                        });
+              // Attempt Native Gemini (For attachments/images)
+              try {
+                console.log(`Attempting Native Google Gemini multimodal model: ${gModel}...`);
+                const geminiContents = [];
+                for (const m of (messages || [])) {
+                  const parts = [];
+                  let role = m.role === 'assistant' ? 'model' : 'user';
+                  if (Array.isArray(m.content)) {
+                    for (const c of m.content) {
+                      if (c.type === 'text' && c.text) parts.push({ text: c.text });
+                      else if (c.type === 'image_url' && c.image_url?.url) {
+                        const match = c.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
+                        if (match) parts.push({ inlineData: { mimeType: match[1], data: match[2] } });
                       }
                     }
+                  } else if (typeof m.content === 'string') {
+                    parts.push({ text: m.content });
                   }
-                } else if (typeof m.content === 'string') {
-                  parts.push({ text: m.content });
-                }
-
-                if (m.attachment && m.attachment.base64) {
-                  const match = m.attachment.base64.match(/^data:([^;]+);base64,(.+)$/);
-                  if (match) {
-                    parts.push({
-                      inlineData: {
-                        mimeType: match[1] || m.attachment.type || "application/octet-stream",
-                        data: match[2]
-                      }
-                    });
+                  if (m.attachment && m.attachment.base64) {
+                    const match = m.attachment.base64.match(/^data:([^;]+);base64,(.+)$/);
+                    if (match) parts.push({ inlineData: { mimeType: match[1] || m.attachment.type || "application/octet-stream", data: match[2] } });
+                    if (m.attachment.textContent) parts.push({ text: `[Attachment Data - ${m.attachment.name}]:\n${m.attachment.textContent}` });
                   }
-                  if (m.attachment.textContent) {
-                    parts.push({ text: `[Attachment Data - ${m.attachment.name}]:\n${m.attachment.textContent}` });
+                  if (parts.length > 0) {
+                    if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === role) {
+                      geminiContents[geminiContents.length - 1].parts.push(...parts);
+                    } else {
+                      geminiContents.push({ role, parts });
+                    }
                   }
                 }
-
-                if (parts.length > 0) {
-                  if (geminiContents.length > 0 && geminiContents[geminiContents.length - 1].role === role) {
-                    geminiContents[geminiContents.length - 1].parts.push(...parts);
-                  } else {
-                    geminiContents.push({ role, parts });
+                if (geminiContents.length === 0) geminiContents.push({ role: 'user', parts: [{ text: 'Hello' }] });
+                
+                const nativeRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${geminiKey}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contents: geminiContents, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }),
+                  signal: AbortSignal.timeout(3500)
+                });
+                if (nativeRes.ok) {
+                  const nativeJson = await nativeRes.json();
+                  const replyText = nativeJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+                  if (replyText && replyText.trim().length > 0) {
+                    return { choices: [{ message: { role: "assistant", content: replyText.trim() } }] };
                   }
+                } else {
+                   const errTxt = await nativeRes.text();
+                   throw new Error(`HTTP ${nativeRes.status} - ${errTxt}`);
                 }
+              } catch (nativeErr) {
+                console.log(`Native Gemini ${gModel} failed:`, nativeErr.message);
+                lastErr = nativeErr;
               }
-              if (geminiContents.length === 0) {
-                geminiContents.push({ role: 'user', parts: [{ text: 'Hello' }] });
-              }
-
-              const nativeRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${geminiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: geminiContents,
-                  generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 2048
-                  }
-                }),
-                signal: AbortSignal.timeout(3500)
-              });
-              if (nativeRes.ok) {
-                const nativeJson = await nativeRes.json();
-                const replyText = nativeJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (replyText && replyText.trim().length > 0) {
-                  globalMemoryModule.storeMemory(Date.now(), lastUserQuery, replyText.trim());
-                  return res.status(200).json(await handleOpenAIImageGeneration({
-                    choices: [{
-                      message: {
-                        role: "assistant",
-                        content: replyText.trim()
-                      }
-                    }]
-                  }, messages));
-                }
-              }
-            } catch (nativeErr) {
-              console.log(`Native Gemini ${gModel} failed:`, nativeErr.message);
             }
+            throw lastErr || new Error("All Gemini fallback models failed");
+          }
+        },
+        {
+          name: 'OpenAI',
+          skip: !process.env.OPENAI_API_KEY,
+          run: async () => {
+            console.log("Attempting OpenAI gpt-4o-mini...");
+            return await callProvider('https://api.openai.com/v1/chat/completions', process.env.OPENAI_API_KEY, 'gpt-4o-mini', null, 3500);
+          }
+        },
+        {
+          name: 'Pollinations',
+          skip: false,
+          run: async () => {
+            console.log('Attempting Free Open Chat Fallback (POST Pollinations)...');
+            const polRes = await fetch('https://text.pollinations.ai/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'User-Agent': browserUserAgent, 'Accept': '*/*' },
+              body: JSON.stringify({ messages, model: 'openai' }),
+              signal: AbortSignal.timeout(25000)
+            });
+            if (!polRes.ok) {
+              const errTxt = await polRes.text();
+              throw new Error(`HTTP ${polRes.status} - ${errTxt}`);
+            }
+            const textContent = await polRes.text();
+            if (textContent && !textContent.includes('{"detail":') && !textContent.includes('"error"') && !textContent.includes('Payment Required') && !textContent.includes('<html>') && textContent.trim().length > 0) {
+              return { choices: [{ message: { role: "assistant", content: textContent.trim() } }] };
+            }
+            throw new Error("Invalid response from Pollinations");
           }
         }
-      } catch (e) {
-        errors.push(`Gemini Error: ${e.message}`);
-        console.log('Gemini failed:', e.message);
-      }
-    }
-
-    try {
-      const openRouterApiKey = process.env.OPENROUTER_API_KEY || atob("c2stb3ItdjEtMzgxOTNhODhmNGM2NTNlY2FmMjhmMjBmMWQ3NTFlNGI5NmFmMDVmNjBiYzdiYjIwMzVkYTFjNjY4MjAwN2I4OQ==");
-      const orModels = requiresVision ? [
-        'google/gemini-2.0-flash-lite-preview-02-05:free',
-        'qwen/qwen-2-vl-72b-instruct:free',
-        'meta-llama/llama-3.2-11b-vision-instruct:free',
-        'openai/gpt-4o-mini'
-      ] : [
-        'meta-llama/llama-3.1-8b-instruct:free',
-        'google/gemini-2.0-flash-lite-preview-02-05:free',
-        'qwen/qwen-2.5-7b-instruct:free',
-        'openai/gpt-4o-mini'
       ];
-      for (const orModel of orModels) {
+
+      for (let i = 0; i < providers.length; i++) {
+        const provider = providers[i];
+        if (provider.skip) {
+          if (provider.name === 'Groq') {
+            console.log('Vision request detected. Skipping Groq.');
+            errors.push('Groq skipped (does not support vision).');
+          }
+          continue;
+        }
+
         try {
-          console.log(`Attempting OpenRouter model: ${orModel}...`);
-          const data = await callProvider(
-            'https://openrouter.ai/api/v1/chat/completions',
-            openRouterApiKey,
-            orModel,
-            null,
-            3500
-          );
-          if (isValidChatResponse(data)) {
-            const contentReply = data?.choices?.[0]?.message?.content || '';
-            if (contentReply) globalMemoryModule.storeMemory(Date.now(), lastUserQuery, contentReply);
-            return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+          if (i > 0) {
+            console.log(`[VOICE DEBUG] FALLBACK PROVIDER SELECTED: ${provider.name}`);
           }
-        } catch (mErr) {
-          console.log(`OpenRouter model ${orModel} failed:`, mErr.message);
-        }
-      }
-    } catch (e) {
-      errors.push(`OpenRouter Error: ${e.message}`);
-      console.log('OpenRouter failed:', e.message);
-    }
-
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        console.log("Attempting OpenAI gpt-4o-mini...");
-        const data = await callProvider(
-          'https://api.openai.com/v1/chat/completions',
-          process.env.OPENAI_API_KEY,
-          'gpt-4o-mini',
-          null,
-          3500
-        );
-        if (isValidChatResponse(data)) {
-          return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
-        }
-      } catch (oErr) {
-        console.log("OpenAI failed:", oErr.message);
-      }
-    }
-
-    // Priority 4: 100% Free Open AI Chat Fallback (No API key required, unlimited)
-    const browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-    const pollModels = ['openai-fast', 'openai', 'default'];
-    for (const pModel of pollModels) {
-      try {
-        console.log(`Attempting Free Open Chat Fallback (POST Pollinations ${pModel})...`);
-        const polBody = pModel === 'default' ? { messages } : { messages, model: pModel };
-        const polPostRes = await fetch('https://text.pollinations.ai/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': browserUserAgent,
-            'Accept': '*/*'
-          },
-          body: JSON.stringify(polBody),
-          signal: AbortSignal.timeout(25000)
-        });
-        if (polPostRes.ok) {
-          const textContent = await polPostRes.text();
-          if (textContent && 
-              !textContent.includes('{"detail":') && 
-              !textContent.includes('"error"') && 
-              !textContent.includes('Payment Required') && 
-              !textContent.includes('<html>') && 
-              textContent.trim().length > 0) {
-            return res.status(200).json(await handleOpenAIImageGeneration({
-              choices: [{
-                message: {
-                  role: "assistant",
-                  content: textContent.trim()
-                }
-              }]
-            }, messages));
+          const data = await provider.run();
+          
+          if (isValidChatResponse(data) || provider.name === 'Gemini' || provider.name === 'Pollinations') {
+             const contentReply = data?.choices?.[0]?.message?.content || '';
+             if (contentReply) globalMemoryModule.storeMemory(Date.now(), lastUserQuery, contentReply);
+             return res.status(200).json(await handleOpenAIImageGeneration(data, messages));
+          }
+          throw new Error(`${provider.name} returned invalid response`);
+        } catch (e) {
+          errors.push(`${provider.name} Error: ${e.message}`);
+          
+          if (i === 0) {
+             console.error(`[VOICE DEBUG] PRIMARY MODEL FAILED: ${provider.name}`);
+          }
+          console.error(`[VOICE DEBUG] FALLBACK FAILURE REASON: ${e.message}`);
+          
+          if (e.message.includes('402') || e.message.includes('429') || e.message.match(/HTTP 5\d\d/)) {
+            console.log(`Gracefully moving to next fallback due to rate limit, server error, or payment required.`);
           }
         }
-      } catch (e1) {
-        console.log(`Pollinations POST ${pModel} failed:`, e1.message);
       }
-    }
-
-    try {
-      console.log('Attempting Free Open Chat Fallback (GET Pollinations)...');
-      const fallbackUserMsg = lastUserMsg || 'Hello';
-      const promptText = encodeURIComponent(fallbackUserMsg.slice(0, 500));
-      const polGetRes = await fetch(`https://text.pollinations.ai/${promptText}?model=openai`, {
-        method: 'GET',
-        headers: {
-          'User-Agent': browserUserAgent,
-          'Accept': '*/*'
-        },
-        signal: AbortSignal.timeout(20000)
-      });
-      if (polGetRes.ok) {
-        const textContent = await polGetRes.text();
-        if (textContent && 
-            !textContent.includes('{"detail":') && 
-            !textContent.includes('"error"') && 
-            !textContent.includes('Payment Required') && 
-            !textContent.includes('<html>') && 
-            textContent.trim().length > 0) {
-          return res.status(200).json(await handleOpenAIImageGeneration({
-            choices: [{
-              message: {
-                role: "assistant",
-                content: textContent.trim()
-              }
-            }]
-          }, messages));
-        }
-      }
-    } catch (e2) {
-      console.log("Pollinations GET failed:", e2.message);
-    }
-
-    try {
-      console.log('Attempting Free Blackbox Web Chat Fallback...');
-      const bbRes = await fetch('https://www.blackbox.ai/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': browserUserAgent
-        },
-        body: JSON.stringify({
-          messages: messages,
-          model: 'blackboxai',
-          max_tokens: 1024
-        }),
-        signal: AbortSignal.timeout(20000)
-      });
-      if (bbRes.ok) {
-        const textContent = await bbRes.text();
-        if (textContent && 
-            !textContent.includes('{"detail":') && 
-            !textContent.includes('"error"') && 
-            !textContent.includes('Payment Required') && 
-            !textContent.includes('<html>') && 
-            textContent.trim().length > 0) {
-          return res.status(200).json(await handleOpenAIImageGeneration({
-            choices: [{
-              message: {
-                role: "assistant",
-                content: textContent.trim()
-              }
-            }]
-          }, messages));
-        }
-      }
-    } catch (e3) {
-      console.log("Blackbox Web failed:", e3.message);
-    }
-
     } catch (aiGenError) {
       console.error("[VOICE DEBUG] CHAT ERROR:");
       console.error(aiGenError.message || "Unknown AI generation error");
