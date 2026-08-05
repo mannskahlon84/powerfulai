@@ -20,9 +20,13 @@ export default async function handler(req, res) {
 
   let messages = [];
   let isVoiceSession = false;
+  let lastUserMsg = '';
+  let lastUserQuery = '';
   try {
+    console.log("[VOICE DEBUG] REQUEST BODY RECEIVED");
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
     messages = Array.isArray(body.messages) ? body.messages : [];
+    console.log("[VOICE DEBUG] MESSAGE COUNT:", messages.length);
     
     // Sanitize messages
     messages = messages.filter(m => {
@@ -47,7 +51,7 @@ export default async function handler(req, res) {
       .find(m => m.role === "user");
 
     const rawContent = lastUserMessage?.content;
-    const lastUserMsg = typeof rawContent === 'string'
+    lastUserMsg = typeof rawContent === 'string'
       ? rawContent
       : (Array.isArray(rawContent) ? (rawContent.find(c => c.type === 'text' || c.text)?.text || '') : '');
 
@@ -55,6 +59,7 @@ export default async function handler(req, res) {
 
     isVoiceSession = req.body?.mode === 'voice' || req.body?.isVoiceSession === true;
     const lang = req.body?.lang || 'en-US';
+    console.log("[VOICE DEBUG] LANGUAGE PARAM RECEIVED:", lang);
     if (isVoiceSession) {
       console.log("[VOICE DEBUG] CHAT LANGUAGE RECEIVED:", lang);
       if (messages.length > 3) {
@@ -134,7 +139,7 @@ CRITICAL VOICE & ASSISTANT CAPABILITIES:
 
     // --- ADVANCED LANGUAGE MODEL ARCHITECTURE LAYERS ---
     // 1. Emotional Intelligence & Personality Adaptation
-    const lastUserQuery = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
+    lastUserQuery = messages && messages.length > 0 ? (typeof messages[messages.length - 1].content === 'string' ? messages[messages.length - 1].content : '') : '';
     const { emotionalProfile, adaptedPersonality } = globalEmotionModule.evaluateEmotionAndAdapt(lastUserQuery);
     const personalityPromptModifier = globalEmotionModule.getPersonalityPromptModifier(adaptedPersonality);
 
@@ -163,6 +168,7 @@ CRITICAL VOICE & ASSISTANT CAPABILITIES:
         dialogueStatePrompt +
         memoryAugmentedText
     };
+    console.log("[VOICE DEBUG] SYSTEM PROMPT LANGUAGE SECTION CREATED");
     
     messages = [systemPrompt, ...messages];
     console.log("[VOICE DEBUG] CHAT PAYLOAD VALIDATED");
@@ -575,7 +581,7 @@ CRITICAL RULES:
 
     console.log("[VOICE DEBUG] lastUserMsg exists:", typeof lastUserMsg);
     console.log("[VOICE DEBUG] lastUserMsg value:", lastUserMsg);
-    console.log("[VOICE DEBUG] MODEL REQUEST START");
+    console.log("[VOICE DEBUG] MODEL PROVIDER START");
     try {
             // AI Provider Fallback Chain: Groq -> Gemini -> OpenAI -> Pollinations(last)
       const browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -719,6 +725,7 @@ CRITICAL RULES:
           throw new Error(`${provider.name} returned invalid response`);
         } catch (e) {
           errors.push(`${provider.name} Error: ${e.message}`);
+          console.error(`[VOICE DEBUG] MODEL PROVIDER ERROR: ${provider.name} failed with ${e.message}`);
           
           if (i === 0) {
              console.error(`[VOICE DEBUG] PRIMARY MODEL FAILED: ${provider.name}`);
@@ -764,7 +771,7 @@ CRITICAL RULES:
   } catch (error) {
     const errorType = error.name || "UnexpectedError";
     const safeMsg = (error.message || "Unknown error").replace(/sk-[a-zA-Z0-9_-]+/g, "[REDACTED_TOKEN]").replace(/AIza[a-zA-Z0-9_-]+/g, "[REDACTED_KEY]").slice(0, 150);
-    console.error("[VOICE DEBUG] CHAT ERROR:");
+    console.error("[VOICE DEBUG] FINAL API ERROR STACK:");
     console.error(error.message || "Unknown error");
     console.error(error.stack || "");
     console.error(`[VOICE DEBUG] CHAT ERROR MESSAGE: ${safeMsg}`);
