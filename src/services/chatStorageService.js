@@ -2,6 +2,24 @@ import { db } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 /**
+ * Recursively removes undefined values from objects/arrays to prevent Firestore setDoc errors.
+ */
+function removeUndefined(obj) {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefined);
+  }
+  const cleanObj = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleanObj[key] = removeUndefined(value);
+    }
+  }
+  return cleanObj;
+}
+
+/**
  * Save user's complete chat history across sessions to Firebase Firestore + LocalStorage.
  * Keeps full context of user prompts, AI text responses, and generated image markdown/URLs.
  */
@@ -16,11 +34,14 @@ export async function saveChatHistoryToDb(userId, chatHistory) {
   if (!db || !userId) return;
 
   try {
+    const cleanedHistory = removeUndefined(chatHistory);
+    console.log("[CHAT STORAGE DEBUG] FIRESTORE PAYLOAD CLEANED");
+
     const userDocRef = doc(db, 'users', String(userId));
     await setDoc(
       userDocRef,
       {
-        chatHistory: chatHistory,
+        chatHistory: cleanedHistory,
         lastUpdated: Date.now(),
       },
       { merge: true }
