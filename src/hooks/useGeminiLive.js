@@ -254,11 +254,8 @@ export function useGeminiLive() {
       }
 
       if (recRef.current) {
-        recRef.current.onend = null;
-        recRef.current.onerror = null;
-        recRef.current.onresult = null;
-        try { recRef.current.stop(); } catch (e) {}
-        recRef.current = null;
+        console.log("[VOICE DEBUG] STT SESSION ALREADY ACTIVE - SKIPPING CREATE");
+        return;
       }
 
       // Replace batch Browser SpeechRecognition with Streaming STT (continuous streaming & instant interim results)
