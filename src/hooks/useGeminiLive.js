@@ -118,6 +118,7 @@ export function useGeminiLive() {
   const lastTtsEndTimeRef = useRef(0);
   const isEchoProtectionRef = useRef(false);
   const isWaitingForUserVoiceRef = useRef(false);
+  const sttSilenceTimerRef = useRef(null);
   const analyserRef = useRef(null);
   const isLiveRef = useRef(false);
 
@@ -318,9 +319,31 @@ export function useGeminiLive() {
           window._activeHtmlAudio = null;
         }
 
+        if (sttSilenceTimerRef.current) {
+          clearTimeout(sttSilenceTimerRef.current);
+          sttSilenceTimerRef.current = null;
+        }
+
         // If this is an interim streaming transcript, show live status and do not submit yet
         if (!result.isFinal) {
           setStatus(`Listening: "${transcript}..."`);
+          
+          sttSilenceTimerRef.current = setTimeout(() => {
+            console.log("[VOICE DEBUG] STT SILENCE TIMEOUT FINALIZING");
+            if (recRef.current) {
+              const handler = recRef.current.onresult;
+              recRef.current.onresult = null;
+              try { recRef.current.stop(); } catch (e) {}
+              if (handler) {
+                handler({
+                  results: [
+                    { 0: { transcript }, isFinal: true }
+                  ]
+                });
+              }
+            }
+          }, 3000);
+          
           return;
         }
 
