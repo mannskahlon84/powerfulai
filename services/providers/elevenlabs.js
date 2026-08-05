@@ -15,6 +15,7 @@ export async function synthesizeWithElevenLabs({
     const voiceId =
         process.env.ELEVENLABS_VOICE_ID ||
         "zcAOhNBS3c14rBihAFp1";
+    console.log("[VOICE DEBUG] TTS VOICE ID:", voiceId);
 
 
     const response = await fetch(

@@ -26,6 +26,9 @@ export default async function handler(req, res) {
       emotion,
       useCase
     });
+    console.log("[VOICE DEBUG] RESPONSE LANGUAGE DETECTED:", lang);
+    console.log("[VOICE DEBUG] FINAL TTS LANGUAGE:", voiceDecision.language);
+    console.log("[VOICE DEBUG] TTS PROVIDER:", voiceDecision.provider);
 
     const synthesisResult = await synthesizeVoice({
       text,

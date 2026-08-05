@@ -22,6 +22,7 @@ export async function synthesizeWithGoogle({
     else {
         langCode = langCode.split("-")[0];
     }
+    console.log("[VOICE DEBUG] TTS VOICE ID: google-translate-native");
 
 
     // Split long text because Google TTS URL has limits

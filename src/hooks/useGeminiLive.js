@@ -66,6 +66,10 @@ export function useGeminiLive() {
   const audioProcessorRef = useRef(null);
   const setupCompleteRef = useRef(false);
   const getInitialLang = () => {
+    try {
+      const stored = localStorage.getItem('preferredVoiceLanguage');
+      if (stored) return stored;
+    } catch(e) {}
     const navLang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
     if (navLang.toLowerCase().includes('in') || navLang.toLowerCase().startsWith('hi') || navLang.toLowerCase().startsWith('pa')) {
       return 'en-IN'; // Bilingual Indian English model accurately transcribes Hindi, Punjabi, Hinglish, Pinglish, and English
@@ -254,6 +258,7 @@ export function useGeminiLive() {
 
       // Replace batch Browser SpeechRecognition with Streaming STT (continuous streaming & instant interim results)
       const rec = new SpeechRecognition();
+      console.log("[VOICE DEBUG] NEW STT SESSION CREATED");
       rec.continuous = true;
       rec.interimResults = true;
       rec.lang = currentLangRef.current || navigator.language || 'en-US';
@@ -350,19 +355,35 @@ export function useGeminiLive() {
 
         console.log("[VOICE DEBUG] STT FINAL TEXT:", transcript);
         
-        const lowerTranscript = transcript.toLowerCase();
-        if (lowerTranscript.match(/switch to hindi|speak hindi|talk in hindi|change language to hindi/i)) {
-          console.log(`[VOICE DEBUG] LANGUAGE COMMAND DETECTED: ${transcript}`);
-          currentLangRef.current = "hi-IN";
-          console.log(`[VOICE DEBUG] LANGUAGE OVERRIDE SET: hi-IN`);
-          setStatus('Listening in Hindi...');
-          startTurnListener();
-          return;
-        } else if (lowerTranscript.match(/switch to english|speak english|talk in english|change language to english/i)) {
-          console.log(`[VOICE DEBUG] LANGUAGE COMMAND DETECTED: ${transcript}`);
-          currentLangRef.current = "en-US";
-          console.log(`[VOICE DEBUG] LANGUAGE OVERRIDE SET: en-US`);
-          setStatus('Listening in English...');
+        const langMap = {
+          hindi: "hi-IN",
+          punjabi: "pa-IN",
+          english: "en-IN",
+          bengali: "bn-IN",
+          gujarati: "gu-IN",
+          marathi: "mr-IN",
+          tamil: "ta-IN",
+          telugu: "te-IN",
+          kannada: "kn-IN",
+          malayalam: "ml-IN",
+          odia: "or-IN",
+          urdu: "ur-IN"
+        };
+        const langRegex = /switch to (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)|speak (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)|talk in (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)|change language to (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)/i;
+        
+        const langMatch = lowerTranscript.match(langRegex);
+        if (langMatch) {
+          const matchedLangName = (langMatch[1] || langMatch[2] || langMatch[3] || langMatch[4]).toLowerCase();
+          const targetCode = langMap[matchedLangName];
+          console.log(`[VOICE DEBUG] LANGUAGE COMMAND DETECTED: ${matchedLangName}`);
+          currentLangRef.current = targetCode;
+          try {
+            localStorage.setItem('preferredVoiceLanguage', targetCode);
+            console.log(`[VOICE DEBUG] USER LANGUAGE PREFERENCE UPDATED: ${targetCode}`);
+          } catch(e){}
+          console.log(`[VOICE DEBUG] ACTIVE RESPONSE LANGUAGE: ${targetCode}`);
+          console.log(`[VOICE DEBUG] ACTIVE VOICE LANGUAGE: ${targetCode}`);
+          setStatus(`Listening in ${targetCode}...`);
           startTurnListener();
           return;
         }
@@ -474,8 +495,14 @@ export function useGeminiLive() {
             setStatus('ECHO_PROTECTION');
           }
           if (recRef.current) {
-            try { recRef.current.abort(); } catch (e) {}
+            const oldRec = recRef.current;
+            oldRec.onresult = null;
+            oldRec.onend = null;
+            oldRec.onerror = null;
+            try { oldRec.abort(); } catch (e) {}
+            recRef.current = null;
             console.log("[VOICE DEBUG] STT BUFFER CLEARED");
+            console.log("[VOICE DEBUG] OLD STT SESSION CLOSED");
           }
 
           // Stage 2: ECHO_PROTECTION lasts 900ms to ignore acoustic tail & buffered TTS transcripts

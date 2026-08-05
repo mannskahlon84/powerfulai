@@ -4,17 +4,14 @@
  * Intelligent TTS provider selection and fallback routing based on language,
  * conversational useCase, emotional styling, and regional accent rules.
  */
+import INDIAN_VOICE_MAP from './indianVoiceMap.js';
 
-const SUPPORTED_LANGUAGES = ['en', 'hi', 'pa', 'ar', 'es', 'fr', 'de', 'zh', 'ja'];
+const SUPPORTED_LANGUAGES = ['en', 'hi', 'pa', 'bn', 'gu', 'mr', 'ta', 'te', 'kn', 'ml', 'or', 'ur', 'ar', 'es', 'fr', 'de', 'zh', 'ja'];
+const INDIC_LANGUAGES = ['hi', 'pa', 'bn', 'gu', 'mr', 'ta', 'te', 'kn', 'ml', 'or', 'ur'];
 
 /**
- * Normalizes a locale/language string to its primary 2-letter ISO 639-1 language code.
- *
- * Examples:
- *   "en-US" -> "en"
- *   "hi-IN" -> "hi"
- *   "pa-IN" -> "pa"
- *   "ar-SA" -> "ar"
+ * Normalizes a locale/language string to its primary 2-letter ISO 639-1 language code,
+ * but preserves -IN regional suffix for Indian languages and Indian English.
  *
  * @param {string} language
  * @returns {string}
@@ -23,31 +20,19 @@ function normalizeLanguage(language = 'en-US') {
   if (!language || typeof language !== 'string') {
     return 'en';
   }
-  return language.trim().split(/[-_]/)[0].toLowerCase();
+  const parts = language.trim().split(/[-_]/);
+  const base = parts[0].toLowerCase();
+  const region = parts.length > 1 ? parts[1].toUpperCase() : '';
+  
+  if ((base === 'en' && region === 'IN') || (INDIC_LANGUAGES.includes(base) && region === 'IN')) {
+    return `${base}-${region}`;
+  }
+  if (INDIC_LANGUAGES.includes(base)) {
+    return `${base}-IN`;
+  }
+  return base;
 }
 
-/**
- * Selects the optimal TTS provider and fallback provider based on language code,
- * use case, emotion, and speaking style.
- *
- * Supported languages: en, hi, pa, ar, es, fr, de, zh, ja
- *
- * Provider Selection Rules:
- *   - Fallback Style/UseCase: Prefer Google Neural
- *   - Customer Support: Prefer OpenAI TTS
- *   - Storytelling: Prefer ElevenLabs Multilingual v2
- *   - Indic Languages (hi, pa): ElevenLabs first, Google Neural as fallback
- *   - Arabic (ar): ElevenLabs first, Google Arabic as fallback
- *   - General Conversation (en, es, fr, de, zh, ja): Prefer ElevenLabs Multilingual v2
- *   - Unknown languages: ElevenLabs with Google fallback
- *
- * @param {object|string} params - Configuration object or language string
- * @param {string} [params.language="en-US"] - Language code
- * @param {string} [params.emotion] - Emotion style (e.g. "warm", "empathetic", "assertive")
- * @param {string} [params.style] - Delivery style (e.g. "storytelling", "formal", "casual", "fallback")
- * @param {string} [params.useCase] - Use case scenario ("customer_support", "storytelling", "general", "fallback")
- * @returns {{ language: string, provider: string, fallbackProvider: string, reason: string }}
- */
 export function selectVoiceProvider(input = {}) {
   let language;
   if (typeof input === 'string') {
@@ -56,10 +41,13 @@ export function selectVoiceProvider(input = {}) {
     language = input.language;
   }
   const normalizedLang = normalizeLanguage(language || 'en-US');
-  console.log("[VOICE DEBUG] VOICE ROUTER LANGUAGE:", normalizedLang);
+  console.log("[VOICE DEBUG] TTS LANGUAGE NORMALIZED:", normalizedLang);
   const decision = _selectVoiceProviderInternal(input, normalizedLang);
-  console.log("[VOICE DEBUG] PROVIDER SELECTED:", decision.provider);
-  console.log("[VOICE DEBUG] PROVIDER:", decision.provider);
+  console.log("[VOICE DEBUG] TTS PROVIDER SELECTED:", decision.provider);
+  
+  const voiceSelection = INDIAN_VOICE_MAP[normalizedLang]?.voice || 'default';
+  console.log("[VOICE DEBUG] TTS VOICE SELECTED:", voiceSelection);
+  
   return decision;
 }
 
@@ -75,9 +63,10 @@ function _selectVoiceProviderInternal(input = {}, normalizedLang) {
     useCase = input.useCase;
   }
 
-  const isIndic = (normalizedLang === 'hi' || normalizedLang === 'pa');
+  const isIndic = normalizedLang.endsWith('-IN') && normalizedLang !== 'en-IN';
+  const isIndianEnglish = normalizedLang === 'en-IN';
   const isArabic = (normalizedLang === 'ar');
-  const isKnown = SUPPORTED_LANGUAGES.includes(normalizedLang);
+  const isKnown = SUPPORTED_LANGUAGES.includes(normalizedLang.split('-')[0]);
 
   // Rule 0: Explicit fallback style or useCase requests Google Neural
   if (style === 'fallback' || useCase === 'fallback') {
@@ -109,17 +98,30 @@ function _selectVoiceProviderInternal(input = {}, normalizedLang) {
     };
   }
 
-  // Rule 3: Indic languages (Hindi, Punjabi) -> try ElevenLabs first, Google Neural fallback
-  if (isIndic) {
+  // Rule 3: en-IN (Indian English)
+  if (isIndianEnglish) {
     return {
       language: normalizedLang,
       provider: 'elevenlabs',
       fallbackProvider: 'google',
-      reason: 'ElevenLabs Devanagari/Gurmukhi phonetic realism with Google Neural Indic fallback'
+      reason: 'Indian English voice'
     };
   }
 
-  // Rule 4: Arabic (ar) -> try ElevenLabs first, Google Arabic fallback
+  // Rule 4: Indic languages
+  if (isIndic) {
+    const provider = (normalizedLang === 'hi-IN' || normalizedLang === 'pa-IN') ? 'elevenlabs' : 'google';
+    const fallback = provider === 'elevenlabs' ? 'google' : 'elevenlabs';
+    
+    return {
+      language: normalizedLang,
+      provider: provider,
+      fallbackProvider: fallback,
+      reason: `${normalizedLang} native voice fallback`
+    };
+  }
+
+  // Rule 5: Arabic (ar) -> try ElevenLabs first, Google Arabic fallback
   if (isArabic) {
     return {
       language: normalizedLang,
@@ -129,7 +131,7 @@ function _selectVoiceProviderInternal(input = {}, normalizedLang) {
     };
   }
 
-  // Rule 5: Supported general conversational languages (en, es, fr, de, zh, ja)
+  // Rule 6: Supported general conversational languages (en, es, fr, de, zh, ja)
   if (isKnown) {
     return {
       language: normalizedLang,
@@ -139,7 +141,7 @@ function _selectVoiceProviderInternal(input = {}, normalizedLang) {
     };
   }
 
-  // Rule 6: Unknown languages default to ElevenLabs with Google fallback
+  // Rule 7: Unknown languages default to ElevenLabs with Google fallback
   return {
     language: normalizedLang,
     provider: 'elevenlabs',

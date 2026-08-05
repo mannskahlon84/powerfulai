@@ -11,6 +11,8 @@ export async function synthesizeWithOpenAI({
         throw new Error("OpenAI API key missing");
     }
 
+    const voiceId = "nova";
+    console.log("[VOICE DEBUG] TTS VOICE ID:", voiceId);
 
     const response = await fetch(
         "https://api.openai.com/v1/audio/speech",
@@ -28,7 +30,7 @@ export async function synthesizeWithOpenAI({
 
                 input: text,
 
-                voice: "nova",
+                voice: voiceId,
 
                 response_format: "mp3",
 
