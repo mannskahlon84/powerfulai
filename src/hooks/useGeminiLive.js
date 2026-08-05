@@ -325,8 +325,26 @@ export function useGeminiLive() {
         }
 
         console.log("[VOICE DEBUG] STT FINAL TEXT:", transcript);
+        
+        const lowerTranscript = transcript.toLowerCase();
+        if (lowerTranscript.match(/switch to hindi|speak hindi|talk in hindi|change language to hindi/i)) {
+          console.log(`[VOICE DEBUG] LANGUAGE COMMAND DETECTED: ${transcript}`);
+          currentLangRef.current = "hi-IN";
+          console.log(`[VOICE DEBUG] LANGUAGE OVERRIDE SET: hi-IN`);
+          setStatus('Listening in Hindi...');
+          startTurnListener();
+          return;
+        } else if (lowerTranscript.match(/switch to english|speak english|talk in english|change language to english/i)) {
+          console.log(`[VOICE DEBUG] LANGUAGE COMMAND DETECTED: ${transcript}`);
+          currentLangRef.current = "en-US";
+          console.log(`[VOICE DEBUG] LANGUAGE OVERRIDE SET: en-US`);
+          setStatus('Listening in English...');
+          startTurnListener();
+          return;
+        }
+
         console.log("[VOICE DEBUG] USER TRANSCRIPT:", transcript);
-        const detectedUserLang = detectLanguageCode(transcript, 'en-US');
+        const detectedUserLang = detectLanguageCode(transcript, currentLangRef.current || 'en-US');
         currentLangRef.current = detectedUserLang;
         console.log("[VOICE DEBUG] DETECTED LANGUAGE:", detectedUserLang);
         console.log("[VOICE DEBUG] STT DETECTED LANGUAGE:", detectedUserLang);
