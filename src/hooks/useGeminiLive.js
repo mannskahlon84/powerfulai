@@ -371,6 +371,7 @@ export function useGeminiLive() {
         };
         const langRegex = /switch to (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)|speak (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)|talk in (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)|change language to (hindi|punjabi|english|bengali|gujarati|marathi|tamil|telugu|kannada|malayalam|odia|urdu)/i;
         
+        const lowerTranscript = transcript.toLowerCase();
         const langMatch = lowerTranscript.match(langRegex);
         if (langMatch) {
           const matchedLangName = (langMatch[1] || langMatch[2] || langMatch[3] || langMatch[4]).toLowerCase();
