@@ -391,8 +391,31 @@ export function useGeminiLive() {
           return;
         }
 
-        console.log("[VOICE DEBUG] USER TRANSCRIPT:", transcript);
-        const detectedUserLang = detectLanguageCode(transcript, currentLangRef.current || 'en-US');
+        let normalizedTranscript = transcript;
+        console.log("[VOICE DEBUG] RAW TRANSCRIPT:", transcript);
+        try {
+          const normRes = await fetch('/api/normalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcript })
+          });
+          if (normRes.ok) {
+            const normData = await normRes.json();
+            if (normData.normalized) {
+              normalizedTranscript = normData.normalized;
+            }
+            console.log("[VOICE DEBUG] NORMALIZED TRANSCRIPT:", normalizedTranscript);
+            console.log("[VOICE DEBUG] NORMALIZATION APPLIED:", String(normData.applied));
+          } else {
+            console.log("[VOICE DEBUG] NORMALIZATION APPLIED: false");
+          }
+        } catch(e) {
+          console.warn("Normalization fallback:", e);
+          console.log("[VOICE DEBUG] NORMALIZATION APPLIED: false");
+        }
+
+        console.log("[VOICE DEBUG] USER TRANSCRIPT:", normalizedTranscript);
+        const detectedUserLang = detectLanguageCode(normalizedTranscript, currentLangRef.current || 'en-US');
         currentLangRef.current = detectedUserLang;
         console.log("[VOICE DEBUG] DETECTED LANGUAGE:", detectedUserLang);
         console.log("[VOICE DEBUG] STT DETECTED LANGUAGE:", detectedUserLang);
@@ -401,7 +424,7 @@ export function useGeminiLive() {
         try { rec.stop(); } catch (e) {}
 
         setStatus('Thinking...');
-        voiceHistoryRef.current.push({ role: 'user', content: transcript });
+        voiceHistoryRef.current.push({ role: 'user', content: normalizedTranscript });
 
         const messagesToSend = voiceHistoryRef.current.slice(-10);
         let replyText = null;
