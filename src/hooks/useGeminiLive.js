@@ -242,6 +242,7 @@ export function useGeminiLive() {
 
     const startTurnListener = () => {
       if (!isLiveRef.current || !wsRef.current || !wsRef.current.active) return;
+      if (isEchoProtectionRef.current || isWaitingForUserVoiceRef.current) return;
 
       if (recRef.current) {
         recRef.current.onend = null;
