@@ -248,6 +248,11 @@ export function useGeminiLive() {
       if (!isLiveRef.current || !wsRef.current || !wsRef.current.active) return;
       if (isEchoProtectionRef.current || isWaitingForUserVoiceRef.current) return;
 
+      if (isAiSpeakingRef.current) {
+        console.log("[VOICE DEBUG] STT BLOCKED: TTS ACTIVE");
+        return;
+      }
+
       if (recRef.current) {
         recRef.current.onend = null;
         recRef.current.onerror = null;
@@ -475,16 +480,21 @@ export function useGeminiLive() {
 
         setStatus('SPEAKING');
         isAiSpeakingRef.current = true;
+        
+        if (recRef.current) {
+          const oldRec = recRef.current;
+          oldRec.onresult = null;
+          oldRec.onend = null;
+          oldRec.onerror = null;
+          try { oldRec.abort(); } catch (e) {}
+          recRef.current = null;
+          console.log("[VOICE DEBUG] STT BUFFER CLEARED");
+          console.log("[VOICE DEBUG] OLD STT SESSION CLOSED");
+        }
+
         lastAiResponseTextRef.current = replyText;
         const targetLang = detectLanguageCode(replyText, currentLangRef.current);
         currentLangRef.current = targetLang;
-
-        // Keep microphone active during TTS playback for natural barge-in support
-        setTimeout(() => {
-          if (isLiveRef.current && wsRef.current && wsRef.current.active) {
-            startTurnListener();
-          }
-        }, 200);
 
         const handleSpeechEnd = () => {
           console.log("[VOICE DEBUG] TTS END", Date.now());
@@ -536,6 +546,7 @@ export function useGeminiLive() {
                 if (isLiveRef.current && wsRef.current && wsRef.current.active) {
                   setStatus('LISTENING');
                   console.log("[VOICE DEBUG] NEW USER LISTENING WINDOW OPENED");
+                  console.log("[VOICE DEBUG] STT SESSION CREATED AFTER ECHO PROTECTION");
                   startTurnListener();
                 }
               } else {
