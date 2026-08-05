@@ -325,9 +325,11 @@ export function useGeminiLive() {
         }
 
         console.log("[VOICE DEBUG] STT FINAL TEXT:", transcript);
+        console.log("[VOICE DEBUG] USER TRANSCRIPT:", transcript);
         const detectedUserLang = detectLanguageCode(transcript, 'en-US');
         currentLangRef.current = detectedUserLang;
         console.log("[VOICE DEBUG] DETECTED LANGUAGE:", detectedUserLang);
+        console.log("[VOICE DEBUG] STT DETECTED LANGUAGE:", detectedUserLang);
 
         isProcessingRef.current = true;
         try { rec.stop(); } catch (e) {}
@@ -429,6 +431,10 @@ export function useGeminiLive() {
           if (isLiveRef.current && wsRef.current && wsRef.current.active) {
             setStatus('ECHO_PROTECTION');
           }
+          if (recRef.current) {
+            try { recRef.current.abort(); } catch (e) {}
+            console.log("[VOICE DEBUG] STT BUFFER CLEARED");
+          }
 
           // Stage 2: ECHO_PROTECTION lasts 900ms to ignore acoustic tail & buffered TTS transcripts
           setTimeout(() => {
@@ -459,6 +465,8 @@ export function useGeminiLive() {
                 console.log("[VOICE DEBUG] MICROPHONE READY");
                 if (isLiveRef.current && wsRef.current && wsRef.current.active) {
                   setStatus('LISTENING');
+                  console.log("[VOICE DEBUG] NEW USER LISTENING WINDOW OPENED");
+                  startTurnListener();
                 }
               } else {
                 setTimeout(checkMicReady, 100);
