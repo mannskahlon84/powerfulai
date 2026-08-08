@@ -126,7 +126,14 @@ function App() {
       
       {/* Main Content Layer */}
       <div className="relative z-10 flex h-full w-full">
-        <div className={`transition-all duration-300 ease-in-out h-full flex-shrink-0 ${isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0 overflow-hidden'}`}>
+        {/* Mobile Overlay */}
+        {isSidebarOpen && (
+          <div 
+            className="md:hidden absolute inset-0 bg-black/20 z-30" 
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+        <div className={`transition-all duration-300 ease-in-out h-full flex-shrink-0 absolute md:relative z-40 bg-white/95 dark:bg-[#0a0a0f]/95 backdrop-blur-xl border-r border-slate-200/50 dark:border-slate-800/50 ${isSidebarOpen ? 'w-64 opacity-100 translate-x-0' : 'w-64 opacity-0 -translate-x-full md:w-0 md:translate-x-0 md:opacity-0 overflow-hidden'}`}>
           <Sidebar 
             chatHistory={chatHistory} 
             activeChatId={activeChatId} 

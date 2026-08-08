@@ -827,6 +827,9 @@ export function useGeminiLive() {
       };
 
       rec.onend = () => {
+        if (recRef.current === rec) {
+          recRef.current = null;
+        }
         if (isLiveRef.current && wsRef.current && wsRef.current.active && !isProcessingRef.current) {
           setTimeout(() => {
             if (isLiveRef.current) startTurnListener();
