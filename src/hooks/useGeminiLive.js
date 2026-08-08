@@ -100,6 +100,7 @@ export function useGeminiLive() {
     
     const source = audioContextRef.current.createBufferSource();
     source.buffer = audioBuffer;
+    source.playbackRate.value = 1.3;
     source.connect(audioContextRef.current.destination);
     
     const currentTime = audioContextRef.current.currentTime;
@@ -244,7 +245,7 @@ export function useGeminiLive() {
       console.warn("Microphone AEC constraints warning:", micErr.message);
     }
 
-    const startTurnListener = () => {
+    const startTurnListener = (forceRecreate = false) => {
       if (!isLiveRef.current || !wsRef.current || !wsRef.current.active) return;
       if (isEchoProtectionRef.current || isWaitingForUserVoiceRef.current) return;
 
@@ -254,8 +255,16 @@ export function useGeminiLive() {
       }
 
       if (recRef.current) {
-        console.log("[VOICE DEBUG] STT SESSION ALREADY ACTIVE - SKIPPING CREATE");
-        return;
+        if (!forceRecreate) {
+          console.log("[VOICE DEBUG] STT SESSION ALREADY ACTIVE - SKIPPING CREATE");
+          return;
+        }
+        recRef.current.onend = null;
+        recRef.current.onerror = null;
+        recRef.current.onresult = null;
+        try { recRef.current.stop(); } catch (e) {}
+        recRef.current = null;
+        console.log("[VOICE DEBUG] STT SESSION RECREATED FOR LANGUAGE SWITCH");
       }
 
       // Replace batch Browser SpeechRecognition with Streaming STT (continuous streaming & instant interim results)
@@ -387,7 +396,7 @@ export function useGeminiLive() {
           console.log(`[VOICE DEBUG] ACTIVE RESPONSE LANGUAGE: ${targetCode}`);
           console.log(`[VOICE DEBUG] ACTIVE VOICE LANGUAGE: ${targetCode}`);
           setStatus(`Listening in ${targetCode}...`);
-          startTurnListener();
+          startTurnListener(true);
           return;
         }
 
@@ -613,12 +622,11 @@ export function useGeminiLive() {
             }
 
             if (formattedLang === 'hi-IN' || formattedLang === 'pa-IN') {
-              utterance.rate = 0.98;
-              utterance.pitch = 1.0;
+              utterance.rate = 1.3;
             } else {
-              utterance.rate = 1.0;
-              utterance.pitch = 1.0;
+              utterance.rate = 1.3;
             }
+            utterance.pitch = 1.0;
 
             let completed = false;
             const safeEnd = () => {
@@ -708,6 +716,7 @@ export function useGeminiLive() {
                     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                     const source = audioCtx.createBufferSource();
                     source.buffer = audioBuffer;
+                    source.playbackRate.value = 1.3;
                     source.connect(audioCtx.destination);
 
                     if (!window._activeBackendSources) {
@@ -793,6 +802,7 @@ export function useGeminiLive() {
                 window._activeHtmlAudio = null;
               }
               const audio = new Audio(gUrl);
+              audio.playbackRate = 1.3;
               window._activeHtmlAudio = audio;
               if (idx === 1) {
                 console.log("[VOICE DEBUG] TTS START", Date.now());
